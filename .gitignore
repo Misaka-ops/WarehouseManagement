@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+backend/data/*.db
+backend/data/*.log
+frontend/node_modules/
+frontend/dist/
+采购/uploaded/
+仓库/*备份*.xlsx
