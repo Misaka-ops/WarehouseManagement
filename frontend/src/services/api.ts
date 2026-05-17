@@ -13,8 +13,10 @@ import type {
   PurchaseReceivePayload,
 } from '../types/inventory'
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api'
+
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+  baseURL: apiBaseUrl,
   timeout: 10000,
 })
 
