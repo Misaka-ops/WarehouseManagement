@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -45,6 +46,24 @@ const submitLabel = computed(() => {
 const referencePrefix = computed(() => (isReceipt.value ? 'RK-' : 'CK-'))
 const alternateRoute = computed(() => (isReceipt.value ? '/issue' : '/receipt'))
 const alternateLabel = computed(() => (isReceipt.value ? '切换到出库页面' : '切换到入库页面'))
+const selectedStockQuantity = computed(() => Number(selectedItem.value?.quantity_on_hand ?? 0))
+const issueBlockedReason = computed(() => {
+  if (isReceipt.value || !selectedItem.value) {
+    return ''
+  }
+
+  if (selectedStockQuantity.value <= 0) {
+    return '当前物料库存为 0，不能执行出库。'
+  }
+
+  const requestedQuantity = Number(form.value.quantity || 0)
+  if (requestedQuantity > selectedStockQuantity.value) {
+    return `出库数量不能超过当前库存 ${selectedStockQuantity.value}。`
+  }
+
+  return ''
+})
+const submitDisabled = computed(() => submitting.value || !selectedItem.value || Boolean(issueBlockedReason.value))
 
 const filteredItems = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
@@ -88,6 +107,11 @@ async function submitTransaction() {
     return
   }
 
+  if (issueBlockedReason.value) {
+    ElMessage.warning(issueBlockedReason.value)
+    return
+  }
+
   submitting.value = true
   form.value.item_id = selectedItemId.value
 
@@ -104,7 +128,11 @@ async function submitTransaction() {
     await loadTransactions(selectedItemId.value)
     resetActionFields()
   } catch (error) {
-    const message = error instanceof Error ? error.message : '提交失败'
+    const message = axios.isAxiosError(error)
+      ? (error.response?.data?.detail as string | undefined) || error.message || '提交失败'
+      : error instanceof Error
+        ? error.message
+        : '提交失败'
     ElMessage.error(message)
   } finally {
     submitting.value = false
@@ -114,6 +142,13 @@ async function submitTransaction() {
 onMounted(async () => {
   form.value.reference_code = referencePrefix.value
   await loadDashboard()
+  if (!isReceipt.value) {
+    const firstAvailableItem = inventoryItems.value.find((item) => Number(item.quantity_on_hand) > 0)
+    if (firstAvailableItem) {
+      chooseInventoryItem(firstAvailableItem)
+    }
+  }
+
   if (selectedItem.value) {
     form.value.item_id = selectedItem.value.id
   }
@@ -257,7 +292,9 @@ onMounted(async () => {
             <textarea v-model="form.notes" rows="4" placeholder="补充本次收发说明"></textarea>
           </label>
 
-          <button class="primary-button" :class="{ issue: !isReceipt }" :disabled="submitting || !selectedItem" type="submit">
+          <p v-if="issueBlockedReason" class="form-hint danger-text">{{ issueBlockedReason }}</p>
+
+          <button class="primary-button" :class="{ issue: !isReceipt }" :disabled="submitDisabled" type="submit">
             {{ submitLabel }}
           </button>
         </form>
