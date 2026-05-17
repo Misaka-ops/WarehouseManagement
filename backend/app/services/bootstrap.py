@@ -7,10 +7,9 @@ from itertools import groupby
 from pathlib import Path
 
 from openpyxl import load_workbook
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, joinedload
 
-from ..config import get_settings
 from ..database import Base, engine
 from ..models import (
     InventoryItem,
@@ -84,17 +83,6 @@ def get_or_create_location(session: Session, name: str | None) -> Location | Non
 
 def create_schema() -> None:
     Base.metadata.create_all(bind=engine)
-
-
-def seed_data(session: Session) -> None:
-    has_inventory = session.scalar(select(func.count()).select_from(InventoryItem))
-    if has_inventory:
-        return
-
-    settings = get_settings()
-    import_warehouse_workbook(session, settings.warehouse_workbook)
-    import_purchase_workbook(session, settings.purchase_workbook)
-    session.commit()
 
 
 def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO) -> tuple[int, int]:

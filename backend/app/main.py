@@ -2,9 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .database import SessionLocal
 from .routers import inventory, purchases
-from .services.bootstrap import create_schema, seed_data
+from .services.bootstrap import create_schema
 
 
 settings = get_settings()
@@ -25,14 +24,8 @@ app.include_router(purchases.router, prefix=settings.api_prefix)
 @app.on_event("startup")
 def startup():
     create_schema()
-    db = SessionLocal()
-    try:
-        seed_data(db)
-    finally:
-        db.close()
 
 
 @app.get("/health")
 def healthcheck():
     return {"status": "ok"}
-
