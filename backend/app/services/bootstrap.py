@@ -7,9 +7,10 @@ from itertools import groupby
 from pathlib import Path
 
 from openpyxl import load_workbook
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, joinedload
 
+from ..config import get_settings
 from ..database import Base, engine
 from ..models import (
     InventoryItem,
@@ -92,7 +93,31 @@ def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO)
     imported_transaction_count = 0
 
     for row in ws.iter_rows(min_row=2, values_only=True):
-        requester, category, project, material, specification, _, unit, supplier_name, stock_qty, notes, location_name, receipt_date, receipt_qty, *_ = row
+        (
+            requester,
+            category,
+            project,
+            material,
+            specification,
+            _,
+            unit,
+            supplier_name,
+            stock_qty,
+            notes,
+            location_name,
+            receipt_date,
+            receipt_qty,
+            issue_qty_1,
+            issue_date_1,
+            issue_operator_1,
+            issue_qty_2,
+            issue_date_2,
+            issue_operator_2,
+            issue_qty_3,
+            issue_date_3,
+            issue_operator_3,
+            *_,
+        ) = row
         material_name = normalize_text(material)
         if not material_name:
             continue
@@ -111,6 +136,10 @@ def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO)
             quantity_on_hand=to_decimal(stock_qty),
             notes=normalize_text(notes),
             last_receipt_at=to_date(receipt_date),
+            last_issue_at=max(
+                (d for d in (to_date(issue_date_1), to_date(issue_date_2), to_date(issue_date_3)) if d is not None),
+                default=None,
+            ),
         )
         session.add(item)
         session.flush()
@@ -130,6 +159,29 @@ def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO)
                 )
             )
             imported_transaction_count += 1
+
+        issue_slots = [
+            (issue_qty_1, issue_date_1, issue_operator_1, 1),
+            (issue_qty_2, issue_date_2, issue_operator_2, 2),
+            (issue_qty_3, issue_date_3, issue_operator_3, 3),
+        ]
+        for issue_qty, issue_date, issue_operator, slot_no in issue_slots:
+            issue_qty_decimal = to_decimal(issue_qty)
+            issue_occurred_on = to_date(issue_date)
+            issue_operator_name = normalize_text(issue_operator)
+            if issue_qty_decimal > 0:
+                session.add(
+                    InventoryTransaction(
+                        item_id=item.id,
+                        transaction_type=TransactionType.issue,
+                        quantity=issue_qty_decimal,
+                        occurred_on=issue_occurred_on or date.today(),
+                        operator_name=issue_operator_name,
+                        reference_code=f"legacy-warehouse-import-issue-{slot_no}",
+                        notes="由仓库 Excel 初始化导入",
+                    )
+                )
+                imported_transaction_count += 1
 
     return imported_item_count, imported_transaction_count
 
@@ -225,7 +277,6 @@ def export_warehouse_workbook(session: Session) -> tuple[str, bytes]:
         issues = sorted(
             [tx for tx in item.transactions if tx.transaction_type == TransactionType.issue],
             key=lambda tx: (tx.occurred_on, tx.id),
-            reverse=True,
         )[:3]
         latest_receipt = receipts[0] if receipts else None
 

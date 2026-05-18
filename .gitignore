@@ -9,3 +9,4 @@ frontend/node_modules/
 frontend/dist/
 采购/uploaded/
 仓库/*备份*.xlsx
+仓库/~$*.xlsx
