@@ -119,3 +119,8 @@ export interface PurchaseReceivePayload {
   reference_code?: string
   notes?: string
 }
+
+export interface PurchasePendingReceiptDeleteResponse {
+  deleted_count: number
+  deleted_item_ids: number[]
+}

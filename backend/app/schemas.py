@@ -84,6 +84,15 @@ class PurchaseReceiveCreate(BaseModel):
     notes: str | None = None
 
 
+class PurchasePendingReceiptDeleteRequest(BaseModel):
+    item_ids: list[int] = Field(min_length=1)
+
+
+class PurchasePendingReceiptDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_item_ids: list[int]
+
+
 class PurchaseOrderItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

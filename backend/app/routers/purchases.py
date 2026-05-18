@@ -10,6 +10,8 @@ from ..schemas import (
     PurchaseImportedItemsAdjustResponse,
     PurchaseImportResponse,
     PurchaseImportStateRead,
+    PurchasePendingReceiptDeleteRequest,
+    PurchasePendingReceiptDeleteResponse,
     PurchaseImportStateUpdateRequest,
     PurchaseOrderRead,
     PurchaseReceiveCandidate,
@@ -17,6 +19,7 @@ from ..schemas import (
 )
 from ..services.inventory import list_pending_purchase_receipts, receive_purchase_item
 from ..services.purchases import (
+    delete_pending_purchase_items,
     get_or_create_purchase_import_states,
     import_purchase_workbook_incremental,
     serialize_purchase_import_state,
@@ -141,4 +144,17 @@ def receive_purchase(payload: PurchaseReceiveCreate, db: Session = Depends(get_d
         operator_name=transaction.operator_name,
         reference_code=transaction.reference_code,
         notes=transaction.notes,
+    )
+
+
+@router.post("/pending-receipts/bulk-delete", response_model=PurchasePendingReceiptDeleteResponse)
+def delete_pending_receipts(payload: PurchasePendingReceiptDeleteRequest, db: Session = Depends(get_db)):
+    try:
+        deleted_item_ids = delete_pending_purchase_items(db, payload.item_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return PurchasePendingReceiptDeleteResponse(
+        deleted_count=len(deleted_item_ids),
+        deleted_item_ids=deleted_item_ids,
     )

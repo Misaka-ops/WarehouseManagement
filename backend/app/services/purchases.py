@@ -17,6 +17,7 @@ from ..schemas import (
     PurchaseImportedItemUpdate,
     PurchaseImportResponse,
     PurchaseImportStateRead,
+    PurchasePendingReceiptDeleteResponse,
 )
 from .bootstrap import normalize_text, to_date, to_decimal
 
@@ -352,3 +353,41 @@ def update_imported_purchase_items(session: Session, updates: list[PurchaseImpor
         .order_by(PurchaseOrderItem.id.asc())
     ).unique().all()
     return [_serialize_imported_item(item) for item in refreshed_items]
+
+
+def delete_pending_purchase_items(session: Session, item_ids: list[int]) -> list[int]:
+    normalized_ids = sorted(set(item_ids))
+    if not normalized_ids:
+        raise ValueError("No purchase items selected for deletion.")
+
+    items = session.scalars(
+        select(PurchaseOrderItem)
+        .options(joinedload(PurchaseOrderItem.order))
+        .where(PurchaseOrderItem.id.in_(normalized_ids))
+    ).unique().all()
+    if not items:
+        raise ValueError("Selected purchase items were not found.")
+
+    deleted_ids: list[int] = []
+    touched_orders: set[int] = set()
+    for item in items:
+        if (item.received_quantity or 0) > 0:
+            raise ValueError(f"采购明细 {item.id} 已收货，不能删除。")
+
+        touched_orders.add(item.order_id)
+        session.delete(item)
+        deleted_ids.append(item.id)
+
+    session.flush()
+
+    for order_id in touched_orders:
+        remaining_items = session.scalars(
+            select(PurchaseOrderItem.id).where(PurchaseOrderItem.order_id == order_id)
+        ).all()
+        if not remaining_items:
+            order = session.get(PurchaseOrder, order_id)
+            if order:
+                session.delete(order)
+
+    session.commit()
+    return deleted_ids

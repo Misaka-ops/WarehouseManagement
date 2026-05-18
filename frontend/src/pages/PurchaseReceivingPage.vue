@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
 import { usePendingReceipts } from '../composables/usePendingReceipts'
-import { receivePurchaseItem } from '../services/api'
+import { deletePendingPurchaseItems, receivePurchaseItem } from '../services/api'
 import type { PurchasePendingReceipt, PurchaseReceivePayload } from '../types/inventory'
 
 const { dashboard, inventoryItems, loadDashboard } = useInventoryWorkspace()
-const { choosePendingReceipt, loadPendingReceipts, pendingReceipts, pendingReceiptsLoading, selectedPendingReceipt, selectedPendingReceiptId } =
-  usePendingReceipts()
+const {
+  choosePendingReceipt,
+  loadPendingReceipts,
+  pendingReceipts,
+  pendingReceiptsLoading,
+  selectedPendingReceipt,
+  selectedPendingReceiptId,
+} = usePendingReceipts()
 
 const receiving = ref(false)
+const deleting = ref(false)
+const selectedDeleteIds = ref<number[]>([])
 const receiptForm = ref<PurchaseReceivePayload>({
   purchase_item_id: 0,
   quantity: 1,
@@ -25,11 +33,77 @@ const relatedInventoryItem = computed(
   () => inventoryItems.value.find((item) => item.id === selectedPendingReceipt.value?.inventory_item_id) ?? null,
 )
 
+const allPendingIds = computed(() => pendingReceipts.value.map((item) => item.purchase_item_id))
+const selectedPendingDeleteIds = computed(() => allPendingIds.value.filter((itemId) => selectedDeleteIds.value.includes(itemId)))
+const allPendingSelected = computed(
+  () => allPendingIds.value.length > 0 && selectedPendingDeleteIds.value.length === allPendingIds.value.length,
+)
+const hasSelectedDeleteItems = computed(() => selectedDeleteIds.value.length > 0)
+
 function syncReceiptForm(item: PurchasePendingReceipt) {
   choosePendingReceipt(item)
   receiptForm.value.purchase_item_id = item.purchase_item_id
   receiptForm.value.quantity = Number(item.pending_quantity)
   receiptForm.value.notes = `${item.material_name} 收货`
+}
+
+function toggleItemSelection(itemId: number) {
+  if (selectedDeleteIds.value.includes(itemId)) {
+    selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => id !== itemId)
+    return
+  }
+
+  selectedDeleteIds.value = [...selectedDeleteIds.value, itemId]
+}
+
+function toggleSelectAllPending() {
+  if (allPendingSelected.value) {
+    selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => !allPendingIds.value.includes(id))
+    return
+  }
+
+  selectedDeleteIds.value = [...new Set([...selectedDeleteIds.value, ...allPendingIds.value])]
+}
+
+async function handleBulkDelete() {
+  if (!selectedDeleteIds.value.length) {
+    ElMessage.warning('请先勾选要删除的采购明细。')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `将删除 ${selectedDeleteIds.value.length} 条待收货采购明细。此操作仅建议在测试阶段使用。`,
+      '确认删除采购明细',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    const response = await deletePendingPurchaseItems(selectedDeleteIds.value)
+    selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => !response.deleted_item_ids.includes(id))
+    await Promise.all([loadPendingReceipts(), loadDashboard({ quiet: true })])
+
+    if (selectedPendingReceipt.value) {
+      syncReceiptForm(selectedPendingReceipt.value)
+    } else {
+      receiptForm.value.purchase_item_id = 0
+    }
+
+    ElMessage.success(`已删除 ${response.deleted_count} 条采购明细。`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '删除采购明细失败'
+    ElMessage.error(message)
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function submitPurchaseReceipt() {
@@ -55,6 +129,11 @@ async function submitPurchaseReceipt() {
     receiving.value = false
   }
 }
+
+watch(pendingReceipts, (items) => {
+  const currentIds = new Set(items.map((item) => item.purchase_item_id))
+  selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => currentIds.has(id))
+})
 
 onMounted(async () => {
   await Promise.all([loadDashboard(), loadPendingReceipts()])
@@ -105,6 +184,20 @@ onMounted(async () => {
           <span class="section-meta">最多展示 40 条</span>
         </div>
 
+        <div class="selection-toolbar">
+          <label class="checkbox-chip">
+            <input :checked="allPendingSelected" type="checkbox" @change="toggleSelectAllPending" />
+            <span>全选当前待收货列表</span>
+          </label>
+
+          <div class="selection-actions">
+            <span>{{ selectedDeleteIds.length }} 项待删除</span>
+            <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
+              {{ deleting ? '删除中...' : '删除勾选采购明细' }}
+            </button>
+          </div>
+        </div>
+
         <div class="stack-list">
           <button
             v-for="item in pendingReceipts"
@@ -115,6 +208,14 @@ onMounted(async () => {
             @click="syncReceiptForm(item)"
           >
             <div class="receipt-card-head">
+              <label class="row-checkbox" @click.stop>
+                <input
+                  :checked="selectedDeleteIds.includes(item.purchase_item_id)"
+                  type="checkbox"
+                  @change="toggleItemSelection(item.purchase_item_id)"
+                />
+              </label>
+
               <strong>{{ item.material_name }}</strong>
               <span>{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
             </div>

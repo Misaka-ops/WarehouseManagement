@@ -10,6 +10,7 @@ import type {
   PurchaseImportResponse,
   PurchaseImportState,
   PurchasePendingReceipt,
+  PurchasePendingReceiptDeleteResponse,
   PurchaseReceivePayload,
 } from '../types/inventory'
 
@@ -109,5 +110,12 @@ export async function updateImportedPurchaseItems(items: Array<{
 
 export async function receivePurchaseItem(payload: PurchaseReceivePayload) {
   const { data } = await api.post<InventoryTransaction>('/purchases/receive', payload)
+  return data
+}
+
+export async function deletePendingPurchaseItems(itemIds: number[]) {
+  const { data } = await api.post<PurchasePendingReceiptDeleteResponse>('/purchases/pending-receipts/bulk-delete', {
+    item_ids: itemIds,
+  })
   return data
 }
