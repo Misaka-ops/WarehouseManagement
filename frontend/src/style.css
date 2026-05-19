@@ -120,7 +120,7 @@ textarea {
   margin: 0 auto;
   padding: 20px;
   display: grid;
-  grid-template-columns: 286px minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -136,7 +136,7 @@ textarea {
 .sidebar-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .brand-panel,
@@ -156,7 +156,7 @@ textarea {
 }
 
 .brand-panel {
-  padding: 24px 22px;
+  padding: 20px 18px;
   background:
     linear-gradient(155deg, rgba(15, 23, 42, 0.98), rgba(15, 118, 110, 0.92)),
     var(--panel);
@@ -173,9 +173,9 @@ textarea {
 }
 
 .brand-panel h1 {
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1.05;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .brand-panel p:last-child,
@@ -218,7 +218,7 @@ textarea {
 .nav-groups {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .sidebar-footer {
@@ -231,22 +231,22 @@ textarea {
 .nav-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .nav-group-title {
-  margin: 0 6px;
+  margin: 0 4px;
   color: var(--muted);
 }
 
 .nav-link {
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(215, 222, 234, 0.9);
-  border-radius: 18px;
-  padding: 13px 14px;
+  border-radius: 16px;
+  padding: 11px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -255,7 +255,8 @@ textarea {
 }
 
 .nav-link strong {
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.25;
 }
 
 .nav-link:hover,

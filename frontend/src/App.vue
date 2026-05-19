@@ -5,7 +5,6 @@ import { useRoute } from 'vue-router'
 type NavItem = {
   to: string
   label: string
-  kicker: string
 }
 
 type NavGroup = {
@@ -19,19 +18,19 @@ const navGroups: NavGroup[] = [
   {
     title: '总览',
     items: [
-      { to: '/', label: '工作台', kicker: 'Hub' },
-      { to: '/overview', label: '仓库总览', kicker: 'Stock' },
+      { to: '/', label: '工作台' },
+      { to: '/overview', label: '仓库总览' },
     ],
   },
   {
     title: '执行',
     items: [
-      { to: '/receipt', label: '入库', kicker: 'Receipt' },
-      { to: '/issue', label: '出库', kicker: 'Issue' },
-      { to: '/purchase-import', label: '采购导入', kicker: 'PI' },
-      { to: '/purchase-receiving', label: '采购收货', kicker: 'PO' },
-      { to: '/inventory-import', label: '库存导入', kicker: 'Import' },
-      { to: '/inventory-export', label: '库存导出', kicker: 'Export' },
+      { to: '/receipt', label: '入库' },
+      { to: '/issue', label: '出库' },
+      { to: '/purchase-import', label: '采购导入' },
+      { to: '/purchase-receiving', label: '采购收货' },
+      { to: '/inventory-import', label: '库存导入' },
+      { to: '/inventory-export', label: '库存导出' },
     ],
   },
 ]
@@ -59,7 +58,6 @@ const pageDescription = computed(() => String(route.meta.description ?? ''))
             class="nav-link"
             :class="{ active: route.path === item.to }"
           >
-            <span class="nav-kicker">{{ item.kicker }}</span>
             <strong>{{ item.label }}</strong>
           </RouterLink>
         </section>
