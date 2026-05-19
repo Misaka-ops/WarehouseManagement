@@ -34,8 +34,8 @@ const isReceipt = computed(() => props.mode === 'receipt')
 const pageLabel = computed(() => (isReceipt.value ? '入库登记' : '出库登记'))
 const pageDescription = computed(() =>
   isReceipt.value
-    ? '专注完成补货、返库和采购到货后的入账。'
-    : '专注完成领料、发放和消耗出账。'
+    ? '登记入库信息。'
+    : '登记出库信息。'
 )
 const submitLabel = computed(() => {
   if (submitting.value) {
@@ -251,7 +251,7 @@ onMounted(async () => {
             <p class="section-kicker">执行表单</p>
             <h3>{{ pageLabel }}</h3>
           </div>
-          <span class="section-meta">单页聚焦单一动作</span>
+          <span class="section-meta">表单</span>
         </div>
 
         <form class="form-stack" @submit.prevent="submitTransaction">

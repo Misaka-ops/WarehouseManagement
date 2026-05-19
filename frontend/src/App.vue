@@ -38,9 +38,7 @@ const navGroups: NavGroup[] = [
 
 const pageEyebrow = computed(() => String(route.meta.eyebrow ?? 'Warehouse Flow'))
 const pageTitle = computed(() => String(route.meta.title ?? '仓储运营台'))
-const pageDescription = computed(
-  () => String(route.meta.description ?? '把日常收发、库存巡检和采购收货拆成清晰的独立工作流。'),
-)
+const pageDescription = computed(() => String(route.meta.description ?? ''))
 </script>
 
 <template>
@@ -49,7 +47,6 @@ const pageDescription = computed(
       <div class="brand-panel">
         <p class="eyebrow">Warehouse Flow</p>
         <h1>仓储运营台</h1>
-        <p>主页回到工作台，再从这里进入仓库总览、入库、出库和采购收货。</p>
       </div>
 
       <div class="nav-groups">
@@ -67,14 +64,6 @@ const pageDescription = computed(
           </RouterLink>
         </section>
       </div>
-
-      <div class="sidebar-footer">
-        <div class="sidebar-note">
-          <p>数据源</p>
-          <strong>Excel 初始化 + 本地 SQLite 实时读写</strong>
-          <span>库存数据来自后端接口，入库/出库会直接更新数据库。</span>
-        </div>
-      </div>
     </aside>
 
     <div class="page-shell">
@@ -82,12 +71,7 @@ const pageDescription = computed(
         <div>
           <p class="eyebrow">{{ pageEyebrow }}</p>
           <h2>{{ pageTitle }}</h2>
-          <p>{{ pageDescription }}</p>
-        </div>
-
-        <div class="banner-pulse">
-          <span>操作路径</span>
-          <strong>工作台 / 功能页面分离</strong>
+          <p v-if="pageDescription">{{ pageDescription }}</p>
         </div>
       </header>
 

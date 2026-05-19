@@ -54,10 +54,6 @@ onMounted(async () => {
         <span class="section-meta">支持当前仓库模板的 `原物料库存清单` 工作表</span>
       </div>
 
-      <p class="section-copy">
-        上传后系统会用这份仓库表单重建当前库存快照，并重新把采购明细关联到匹配的库存项。适合把线下仓库表作为最新库存基准时使用。
-      </p>
-
       <div class="metric-grid compact">
         <article class="metric-card">
           <span>当前库存项目</span>
@@ -89,23 +85,8 @@ onMounted(async () => {
             <input accept=".xlsx,.xlsm,.xltx,.xltm" class="upload-input" type="file" @change="handleFileChange" />
             <span class="upload-kicker">Excel Upload</span>
             <strong>{{ fileLabel }}</strong>
-            <p>点击选择文件，文件会从你的本地计算机上传到当前系统进行解析导入。</p>
+            <p>选择并上传仓库 Excel 文件。</p>
           </label>
-
-          <div class="import-notes">
-            <article class="note-card">
-              <strong>模板要求</strong>
-              <p>工作簿内需要包含 `原物料库存清单` 工作表，并沿用当前仓库模板列结构。</p>
-            </article>
-            <article class="note-card">
-              <strong>导入行为</strong>
-              <p>导入会以新表单重建库存快照，现有库存记录与库存流水会被替换。</p>
-            </article>
-            <article class="note-card">
-              <strong>采购关联</strong>
-              <p>系统会在导入后按物料名称和规格型号重新关联采购明细到库存项。</p>
-            </article>
-          </div>
 
           <div class="link-row">
             <button class="primary-button" :disabled="importing || !selectedFile" type="button" @click="submitImport">
@@ -145,7 +126,7 @@ onMounted(async () => {
         </div>
 
         <div v-else class="empty-state">
-          选择本地 Excel 后点击导入，系统会在这里显示本次导入的库存数量、流水数量和采购重关联结果。
+          尚未执行导入。
         </div>
       </section>
     </div>

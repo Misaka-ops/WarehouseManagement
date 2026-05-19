@@ -7,8 +7,6 @@ import { usePendingReceipts } from '../composables/usePendingReceipts'
 const { dashboard, inventoryItems, loading, loadDashboard } = useInventoryWorkspace()
 const { loadPendingReceipts, pendingReceipts, pendingReceiptsLoading } = usePendingReceipts()
 
-const todayLabel = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())
-
 const moduleCards = [
   {
     to: '/overview',
@@ -74,15 +72,11 @@ onMounted(async () => {
   <section class="page-section hero-section">
     <div class="section-heading">
       <div>
-        <p class="section-kicker">今日工作台</p>
-        <h3>把仓库操作拆成几个明确入口</h3>
+        <p class="section-kicker">工作台</p>
+        <h3>库存态势</h3>
       </div>
-      <span class="section-meta">{{ todayLabel }}</span>
+      <span class="section-meta">总览</span>
     </div>
-
-    <p class="section-copy">
-      主页只负责给你一个清晰的出发点。先看库存态势，再决定去仓库总览、入库、出库还是采购收货页面，避免所有动作挤在一个界面里。
-    </p>
 
     <div class="metric-grid">
       <article class="metric-card">
@@ -107,10 +101,10 @@ onMounted(async () => {
   <section class="page-section">
     <div class="section-heading">
       <div>
-        <p class="section-kicker">功能入口</p>
-        <h3>按工作流进入页面</h3>
+        <p class="section-kicker">快捷入口</p>
+        <h3>常用操作</h3>
       </div>
-      <span class="section-meta">减少同页混杂操作</span>
+      <span class="section-meta">导航</span>
     </div>
 
     <div class="module-grid">
