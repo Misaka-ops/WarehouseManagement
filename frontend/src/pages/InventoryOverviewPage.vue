@@ -235,7 +235,7 @@ onMounted(async () => {
             </article>
           </div>
 
-          <div class="link-row">
+          <div class="link-row sticky-links">
             <RouterLink class="action-link ghost" to="/inventory-import">去做库存导入</RouterLink>
             <RouterLink class="action-link ghost" to="/inventory-export">去做库存导出</RouterLink>
             <RouterLink class="action-link" to="/receipt">去做入库</RouterLink>

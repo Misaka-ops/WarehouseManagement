@@ -96,6 +96,21 @@ onMounted(async () => {
         <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong>
       </article>
     </div>
+
+    <div class="status-strip">
+      <div>
+        <span>当前关注</span>
+        <strong>{{ dashboard ? '库存与待收货' : '加载中' }}</strong>
+      </div>
+      <div>
+        <span>低库存</span>
+        <strong>{{ dashboard?.summary.low_stock_items ?? '--' }}</strong>
+      </div>
+      <div>
+        <span>待收货</span>
+        <strong>{{ pendingReceiptsLoading ? '--' : pendingReceipts.length }}</strong>
+      </div>
+    </div>
   </section>
 
   <section class="page-section">

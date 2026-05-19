@@ -211,14 +211,10 @@ onMounted(async () => {
             <p>上传后会按当前记录的上次导入行号，只导入新增采购行。</p>
           </label>
 
-          <div class="import-notes">
-            <article class="note-card">
-              <strong>本次可做</strong>
-              <p>增量导入、记录并修改导入行号、导入后弹窗查看清单、手工调整物料和库存匹配。</p>
-            </article>
+          <div class="import-notes compact-notes">
             <article class="note-card warm-note">
-              <strong>需要你判断的点</strong>
-              <p>采购表单与现有库存项目名称或规格不一致时，目前只做精确匹配，再由你在结果弹窗里手工修正。</p>
+              <strong>匹配规则</strong>
+              <p>物料名称和规格型号会精确匹配库存项。</p>
             </article>
           </div>
 
