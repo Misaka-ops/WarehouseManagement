@@ -73,6 +73,7 @@ export interface PurchasePendingReceipt {
   unit: string | null
   expected_arrival: string | null
   inventory_item_id: number | null
+  location_name: string | null
 }
 
 export interface PurchaseImportState {
@@ -165,10 +166,54 @@ export interface FeishuPurchaseImportResponse extends FeishuPurchaseSyncResponse
   skipped_import_count: number
 }
 
+export interface FeishuPurchasePreviewItem {
+  line_no: number
+  material_name: string
+  specification: string | null
+  requested_quantity: string | null
+  total_amount: string | null
+  link: string | null
+  inventory_item_id: number | null
+}
+
+export interface FeishuPurchasePreviewOrder {
+  instance_code: string
+  approval_code: string
+  status: string | null
+  title: string | null
+  requester: string | null
+  creator_name: string | null
+  purchase_category: string | null
+  project_name: string | null
+  requested_at: string | null
+  ordered_at: string | null
+  serial_number: string | null
+  already_imported: boolean
+  can_import: boolean
+  skip_reason: string | null
+  items: FeishuPurchasePreviewItem[]
+}
+
+export interface FeishuPurchasePreviewResponse {
+  approval_code: string
+  fetched_instance_count: number
+  created_instance_count: number
+  updated_instance_count: number
+  skipped_instance_count: number
+  filtered_imported_instance_count: number
+  filtered_historical_instance_count: number
+  importable_instance_count: number
+  importable_item_count: number
+  sync_state: FeishuApprovalSyncState
+  orders: FeishuPurchasePreviewOrder[]
+  warnings: string[]
+}
+
 export interface PurchaseReceivePayload {
   purchase_item_id: number
   quantity: number
   occurred_on: string
+  location_name?: string
   operator_name?: string
   reference_code?: string
   notes?: string

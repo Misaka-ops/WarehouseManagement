@@ -32,6 +32,9 @@ from ..schemas import (
     FeishuApprovalSyncStateRead,
     FeishuPurchaseImportRequest,
     FeishuPurchaseImportResponse,
+    FeishuPurchasePreviewItemRead,
+    FeishuPurchasePreviewOrderRead,
+    FeishuPurchasePreviewResponse,
     FeishuInstancePullRequest,
     FeishuPurchaseSyncRequest,
     FeishuPurchaseSyncResponse,
@@ -1020,6 +1023,96 @@ def _import_feishu_purchase_instance(
     return 1, imported_item_count, True
 
 
+def _build_feishu_purchase_preview_order(
+    session: Session,
+    *,
+    approval_code: str,
+    instance_record: FeishuApprovalInstanceRecordRead,
+    imported_instance_codes: set[str],
+    inventory_match_cache: dict[tuple[str, str | None], int | None],
+) -> FeishuPurchasePreviewOrderRead:
+    already_imported = instance_record.instance_code in imported_instance_codes
+
+    try:
+        payload = json.loads(instance_record.raw_payload)
+    except json.JSONDecodeError:
+        return FeishuPurchasePreviewOrderRead(
+            instance_code=instance_record.instance_code,
+            approval_code=approval_code,
+            status=instance_record.status,
+            title=instance_record.title,
+            requester=instance_record.creator_name,
+            creator_name=instance_record.creator_name,
+            already_imported=already_imported,
+            can_import=False,
+            skip_reason="飞书实例原始数据不可解析。",
+            items=[],
+        )
+
+    if not isinstance(payload, dict):
+        return FeishuPurchasePreviewOrderRead(
+            instance_code=instance_record.instance_code,
+            approval_code=approval_code,
+            status=instance_record.status,
+            title=instance_record.title,
+            requester=instance_record.creator_name,
+            creator_name=instance_record.creator_name,
+            already_imported=already_imported,
+            can_import=False,
+            skip_reason="飞书实例原始数据格式不正确。",
+            items=[],
+        )
+
+    parsed = _parse_feishu_purchase_payload(payload)
+    preview_items: list[FeishuPurchasePreviewItemRead] = []
+    for row in parsed.items:
+        cache_key = (row.material_name, row.specification)
+        if cache_key not in inventory_match_cache:
+            matched_item = _match_inventory_item(session, row.material_name, row.specification)
+            inventory_match_cache[cache_key] = matched_item.id if matched_item else None
+        preview_items.append(
+            FeishuPurchasePreviewItemRead(
+                line_no=row.line_no,
+                material_name=row.material_name,
+                specification=row.specification,
+                requested_quantity=row.requested_quantity,
+                total_amount=row.total_amount,
+                link=row.link,
+                inventory_item_id=inventory_match_cache[cache_key],
+            )
+        )
+
+    skip_reason: str | None = None
+    can_import = True
+    if not _is_approved_instance(instance_record.status):
+        can_import = False
+        skip_reason = "当前审批状态未通过，暂不可导入。"
+    elif already_imported:
+        can_import = False
+        skip_reason = "该审批实例已经导入过采购收货列表。"
+    elif not preview_items:
+        can_import = False
+        skip_reason = "未解析出物品明细，暂不可导入。"
+
+    return FeishuPurchasePreviewOrderRead(
+        instance_code=instance_record.instance_code,
+        approval_code=approval_code,
+        status=instance_record.status,
+        title=instance_record.title,
+        requester=parsed.requester or instance_record.creator_name,
+        creator_name=instance_record.creator_name,
+        purchase_category=parsed.purchase_category,
+        project_name=parsed.project_name,
+        requested_at=parsed.requested_at,
+        ordered_at=parsed.ordered_at,
+        serial_number=parsed.serial_number,
+        already_imported=already_imported,
+        can_import=can_import,
+        skip_reason=skip_reason,
+        items=preview_items,
+    )
+
+
 def pull_feishu_instance_by_code(
     session: Session,
     payload: FeishuInstancePullRequest,
@@ -1039,6 +1132,53 @@ def pull_feishu_instance_by_code(
     session.commit()
     session.refresh(record)
     return serialize_feishu_instance(record)
+
+
+def preview_feishu_purchase_instances(
+    session: Session,
+    payload: FeishuPurchaseSyncRequest,
+) -> FeishuPurchasePreviewResponse:
+    sync_response = sync_feishu_purchase_instances(session, payload)
+    instance_codes = [record.instance_code for record in sync_response.instances]
+    imported_instance_codes = set()
+    inventory_match_cache: dict[tuple[str, str | None], int | None] = {}
+
+    if instance_codes:
+        imported_instance_codes = set(
+            session.scalars(
+                select(FeishuPurchaseOrderMeta.approval_instance_code).where(
+                    FeishuPurchaseOrderMeta.approval_code == sync_response.approval_code,
+                    FeishuPurchaseOrderMeta.approval_instance_code.in_(instance_codes),
+                )
+            ).all()
+        )
+
+    orders = [
+        _build_feishu_purchase_preview_order(
+            session,
+            approval_code=sync_response.approval_code,
+            instance_record=record,
+            imported_instance_codes=imported_instance_codes,
+            inventory_match_cache=inventory_match_cache,
+        )
+        for record in sync_response.instances
+    ]
+
+    importable_orders = [order for order in orders if order.can_import]
+    return FeishuPurchasePreviewResponse(
+        approval_code=sync_response.approval_code,
+        fetched_instance_count=sync_response.fetched_instance_count,
+        created_instance_count=sync_response.created_instance_count,
+        updated_instance_count=sync_response.updated_instance_count,
+        skipped_instance_count=sync_response.skipped_instance_count,
+        filtered_imported_instance_count=sync_response.filtered_imported_instance_count,
+        filtered_historical_instance_count=sync_response.filtered_historical_instance_count,
+        importable_instance_count=len(importable_orders),
+        importable_item_count=sum(len(order.items) for order in importable_orders),
+        sync_state=sync_response.sync_state,
+        orders=orders,
+        warnings=sync_response.warnings,
+    )
 
 
 def import_feishu_purchase_instances(
@@ -1074,71 +1214,17 @@ def import_feishu_purchase_instances(
             continue
 
         try:
-            payload_dict = json.loads(record.raw_payload)
-            if not isinstance(payload_dict, dict):
-                raise FeishuIntegrationError(f"{record.instance_code}: 飞书实例原始数据格式不正确。")
-            parsed = _parse_feishu_purchase_payload(payload_dict)
-            if not parsed.items:
-                raise FeishuIntegrationError(f"{record.instance_code}: 未能从飞书表单解析出采购明细。")
-
-            order = PurchaseOrder(
-                sheet_name="飞书采购申请",
-                requester=parsed.requester,
-                purchase_category=parsed.purchase_category,
-                project_name=parsed.project_name,
-                supplier_name=None,
-                status=PurchaseOrderStatus.pending,
-                requested_at=parsed.requested_at,
-                ordered_at=parsed.ordered_at,
-                contract_no=parsed.contract_no,
-                notes=_build_purchase_order_notes(parsed, sync_response.approval_code, record.instance_code),
+            imported_orders, imported_items, _ = _import_feishu_purchase_instance(
+                session,
+                approval_code=sync_response.approval_code,
+                instance_record=record,
             )
-            session.add(order)
-            session.flush()
-
-            session.add(
-                FeishuPurchaseOrderMeta(
-                    approval_instance_code=record.instance_code,
-                    approval_code=sync_response.approval_code,
-                    purchase_order_id=order.id,
-                    serial_number=parsed.serial_number,
-                    approval_status=parsed.approval_status,
-                )
-            )
-
             if existing_meta is not None and force_reimport:
                 reimported_order_count += 1
+                reimported_item_count += imported_items
             else:
-                imported_order_count += 1
-            for row in parsed.items:
-                inventory_item = _match_inventory_item(session, row.material_name, row.specification)
-                purchase_item = PurchaseOrderItem(
-                    order_id=order.id,
-                    inventory_item_id=inventory_item.id if inventory_item else None,
-                    line_no=row.line_no,
-                    material_name=row.material_name,
-                    specification=row.specification,
-                    requested_quantity=row.requested_quantity,
-                    received_quantity=Decimal("0"),
-                    unit=None,
-                    unit_price=None,
-                    tax_rate=None,
-                    total_amount=row.total_amount,
-                    expected_arrival=parsed.requested_at,
-                )
-                session.add(purchase_item)
-                session.flush()
-                session.add(
-                    FeishuPurchaseItemMeta(
-                        purchase_item_id=purchase_item.id,
-                        approval_instance_code=record.instance_code,
-                        source_line_no=row.line_no,
-                    )
-                )
-                if existing_meta is not None and force_reimport:
-                    reimported_item_count += 1
-                else:
-                    imported_item_count += 1
+                imported_order_count += imported_orders
+                imported_item_count += imported_items
         except FeishuIntegrationError as exc:
             skipped_import_count += 1
             warnings.append(str(exc))

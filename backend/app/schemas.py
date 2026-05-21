@@ -79,6 +79,7 @@ class PurchaseReceiveCreate(BaseModel):
     purchase_item_id: int
     quantity: Decimal = Field(gt=0)
     occurred_on: date
+    location_name: str | None = None
     operator_name: str | None = None
     reference_code: str | None = None
     notes: str | None = None
@@ -213,6 +214,49 @@ class FeishuPurchaseImportResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class FeishuPurchasePreviewItemRead(BaseModel):
+    line_no: int
+    material_name: str
+    specification: str | None
+    requested_quantity: Decimal | None
+    total_amount: Decimal | None
+    link: str | None
+    inventory_item_id: int | None
+
+
+class FeishuPurchasePreviewOrderRead(BaseModel):
+    instance_code: str
+    approval_code: str
+    status: str | None
+    title: str | None
+    requester: str | None
+    creator_name: str | None
+    purchase_category: str | None
+    project_name: str | None
+    requested_at: date | None
+    ordered_at: date | None
+    serial_number: str | None
+    already_imported: bool = False
+    can_import: bool = False
+    skip_reason: str | None = None
+    items: list[FeishuPurchasePreviewItemRead] = Field(default_factory=list)
+
+
+class FeishuPurchasePreviewResponse(BaseModel):
+    approval_code: str
+    fetched_instance_count: int
+    created_instance_count: int
+    updated_instance_count: int
+    skipped_instance_count: int
+    filtered_imported_instance_count: int = 0
+    filtered_historical_instance_count: int = 0
+    importable_instance_count: int = 0
+    importable_item_count: int = 0
+    sync_state: FeishuApprovalSyncStateRead
+    orders: list[FeishuPurchasePreviewOrderRead] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class PurchaseImportItemRead(BaseModel):
     purchase_item_id: int
     purchase_order_id: int
@@ -293,3 +337,4 @@ class PurchaseReceiveCandidate(BaseModel):
     unit: str | None
     expected_arrival: date | None
     inventory_item_id: int | None
+    location_name: str | None = None

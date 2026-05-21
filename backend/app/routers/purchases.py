@@ -10,6 +10,7 @@ from ..schemas import (
     FeishuApprovalSyncStateRead,
     FeishuPurchaseImportRequest,
     FeishuPurchaseImportResponse,
+    FeishuPurchasePreviewResponse,
     FeishuInstancePullRequest,
     FeishuPurchaseSyncRequest,
     FeishuPurchaseSyncResponse,
@@ -32,6 +33,7 @@ from ..services.feishu import (
     import_feishu_purchase_instances,
     list_feishu_instance_records,
     list_feishu_sync_states,
+    preview_feishu_purchase_instances,
     pull_feishu_instance_by_code,
     sync_feishu_purchase_instances,
 )
@@ -195,6 +197,14 @@ def sync_feishu_purchase(payload: FeishuPurchaseSyncRequest, db: Session = Depen
 def import_feishu_purchase(payload: FeishuPurchaseImportRequest, db: Session = Depends(get_db)):
     try:
         return import_feishu_purchase_instances(db, payload)
+    except FeishuIntegrationError as exc:
+        raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
+
+
+@router.post("/feishu/preview", response_model=FeishuPurchasePreviewResponse)
+def preview_feishu_purchase(payload: FeishuPurchaseSyncRequest, db: Session = Depends(get_db)):
+    try:
+        return preview_feishu_purchase_instances(db, payload)
     except FeishuIntegrationError as exc:
         raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
 

@@ -7,13 +7,16 @@ import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
 import { usePendingReceipts } from '../composables/usePendingReceipts'
 import {
   fetchPurchaseImportStates,
-  importPurchaseWorkbook,
   importFeishuPurchase,
+  importPurchaseWorkbook,
+  previewFeishuPurchase,
   updateImportedPurchaseItems,
   updatePurchaseImportStates,
 } from '../services/api'
 import type {
   FeishuPurchaseImportResponse,
+  FeishuPurchasePreviewOrder,
+  FeishuPurchasePreviewResponse,
   PurchaseImportItem,
   PurchaseImportResponse,
   PurchaseImportState,
@@ -35,8 +38,12 @@ const savingAdjustments = ref(false)
 const feishuTimeRangeDays = ref(10)
 const importResult = ref<PurchaseImportResponse | null>(null)
 const feishuSyncResult = ref<FeishuPurchaseImportResponse | null>(null)
+const feishuPreviewResult = ref<FeishuPurchasePreviewResponse | null>(null)
 const resultDialogVisible = ref(false)
+const feishuPreviewDialogVisible = ref(false)
+const confirmingFeishuImport = ref(false)
 const editableItems = ref<EditableImportItem[]>([])
+const selectedFeishuInstanceCodes = ref<string[]>([])
 
 const feishuTimeRangeOptions = [
   { label: '近一天', value: 1 },
@@ -48,6 +55,20 @@ const rowInputs = reactive<Record<string, number>>({})
 
 const unmatchedCount = computed(() => editableItems.value.filter((item) => item.inventory_item_id == null).length)
 const fileLabel = computed(() => selectedFile.value?.name ?? '尚未选择采购 Excel 文件')
+const feishuPreviewOrders = computed(() => feishuPreviewResult.value?.orders ?? [])
+const importableFeishuOrders = computed(() => feishuPreviewOrders.value.filter((order) => order.can_import))
+const importableFeishuInstanceCodes = computed(() => importableFeishuOrders.value.map((order) => order.instance_code))
+const selectedFeishuOrders = computed(() =>
+  feishuPreviewOrders.value.filter((order) => selectedFeishuInstanceCodes.value.includes(order.instance_code)),
+)
+const selectedFeishuItemCount = computed(() =>
+  selectedFeishuOrders.value.reduce((total, order) => total + order.items.length, 0),
+)
+const allImportableFeishuSelected = computed(
+  () =>
+    importableFeishuInstanceCodes.value.length > 0 &&
+    selectedFeishuInstanceCodes.value.length === importableFeishuInstanceCodes.value.length,
+)
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -72,6 +93,15 @@ function formatDateTime(value: string | null) {
 
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return '未记录'
+  }
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('zh-CN')
 }
 
 function syncStates(nextStates: PurchaseImportState[]) {
@@ -116,6 +146,28 @@ function buildEditableItems(items: PurchaseImportItem[]) {
   }))
 }
 
+function selectFeishuPreviewOrders(orders: FeishuPurchasePreviewOrder[]) {
+  selectedFeishuInstanceCodes.value = orders.filter((order) => order.can_import).map((order) => order.instance_code)
+}
+
+function toggleFeishuOrderSelection(instanceCode: string) {
+  if (selectedFeishuInstanceCodes.value.includes(instanceCode)) {
+    selectedFeishuInstanceCodes.value = selectedFeishuInstanceCodes.value.filter((code) => code !== instanceCode)
+    return
+  }
+
+  selectedFeishuInstanceCodes.value = [...selectedFeishuInstanceCodes.value, instanceCode]
+}
+
+function toggleSelectAllFeishuOrders() {
+  if (allImportableFeishuSelected.value) {
+    selectedFeishuInstanceCodes.value = []
+    return
+  }
+
+  selectedFeishuInstanceCodes.value = [...importableFeishuInstanceCodes.value]
+}
+
 async function submitImport() {
   if (!selectedFile.value) {
     ElMessage.warning('请先选择采购 Excel 文件。')
@@ -151,32 +203,65 @@ async function submitImport() {
 async function syncFeishuImport() {
   syncingFeishu.value = true
   try {
-    const response = await importFeishuPurchase({ time_range_days: feishuTimeRangeDays.value })
-    feishuSyncResult.value = response
-    await Promise.all([loadDashboard({ quiet: true }), loadPendingReceipts()])
+    const response = await previewFeishuPurchase({ time_range_days: feishuTimeRangeDays.value })
+    feishuPreviewResult.value = response
+    selectFeishuPreviewOrders(response.orders)
 
-    if (response.warnings.length) {
-      ElMessage.warning(`抓取 ${response.fetched_instance_count} 条实例，飞书同步完成，但有 ${response.warnings.length} 条详情拉取失败。`)
-    } else {
-      ElMessage.success(`抓取 ${response.fetched_instance_count} 条实例，飞书同步完成。`)
+    if (!response.orders.length) {
+      ElMessage.success(`抓取 ${response.fetched_instance_count} 条实例，本次没有获取到可展示的飞书采购数据。`)
+      return
     }
 
-    if (response.reimported_order_count > 0) {
-      ElMessage.success(
-        `抓取 ${response.fetched_instance_count} 条实例，强制重跑 ${response.reimported_order_count} 单 / ${response.reimported_item_count} 条明细。`,
-      )
-    } else if (response.imported_order_count > 0) {
-      ElMessage.success(
-        `抓取 ${response.fetched_instance_count} 条实例，导入 ${response.imported_order_count} 单 / ${response.imported_item_count} 条明细。`,
+    feishuPreviewDialogVisible.value = true
+    if (response.warnings.length) {
+      ElMessage.warning(
+        `抓取 ${response.fetched_instance_count} 条实例，可导入 ${response.importable_instance_count} 单 / ${response.importable_item_count} 条物品，但有 ${response.warnings.length} 条警告。`,
       )
     } else {
-      ElMessage.success(`抓取 ${response.fetched_instance_count} 条实例，本次没有新增可导入的飞书采购单。`)
+      ElMessage.success(
+        `抓取 ${response.fetched_instance_count} 条实例，可导入 ${response.importable_instance_count} 单 / ${response.importable_item_count} 条物品，请确认后再加入采购收货。`,
+      )
     }
   } catch (error) {
     const message = getErrorMessage(error, '飞书采购同步失败')
     ElMessage.error(message)
   } finally {
     syncingFeishu.value = false
+  }
+}
+
+async function confirmFeishuImport() {
+  if (!selectedFeishuInstanceCodes.value.length) {
+    ElMessage.warning('请先勾选要加入采购收货的飞书采购单。')
+    return
+  }
+
+  confirmingFeishuImport.value = true
+  try {
+    const response = await importFeishuPurchase({
+      approval_code: feishuPreviewResult.value?.approval_code,
+      instance_codes: selectedFeishuInstanceCodes.value,
+    })
+    feishuSyncResult.value = response
+    feishuPreviewDialogVisible.value = false
+    await Promise.all([loadDashboard({ quiet: true }), loadPendingReceipts()])
+
+    if (response.warnings.length) {
+      ElMessage.warning(`已确认导入，但有 ${response.warnings.length} 条警告，请留意下方结果。`)
+    }
+
+    if (response.reimported_order_count > 0) {
+      ElMessage.success(`已导入 ${response.reimported_order_count} 单 / ${response.reimported_item_count} 条飞书采购明细。`)
+    } else if (response.imported_order_count > 0) {
+      ElMessage.success(`已导入 ${response.imported_order_count} 单 / ${response.imported_item_count} 条飞书采购明细。`)
+    } else {
+      ElMessage.success('本次确认后没有新增可导入的飞书采购单。')
+    }
+  } catch (error) {
+    const message = getErrorMessage(error, '确认导入飞书采购失败')
+    ElMessage.error(message)
+  } finally {
+    confirmingFeishuImport.value = false
   }
 }
 
@@ -293,7 +378,7 @@ onMounted(async () => {
             </article>
             <article class="note-card warm-note">
               <strong>飞书同步</strong>
-              <p>使用后端已配置的飞书采购审批编码拉取审批实例，同步后会刷新看板和待收货列表。</p>
+              <p>使用后端已配置的飞书采购审批编码拉取审批实例，先预览物品列表，确认后才加入待收货。</p>
               <label class="field compact-field">
                 <span>同步范围</span>
                 <select v-model.number="feishuTimeRangeDays">
@@ -310,12 +395,12 @@ onMounted(async () => {
               {{ importing ? '导入中...' : '开始采购增量导入' }}
             </button>
             <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
-              {{ syncingFeishu ? '同步中...' : '同步飞书采购申请' }}
+              {{ syncingFeishu ? '同步中...' : '同步并预览飞书采购申请' }}
             </button>
             <RouterLink class="action-link ghost" to="/purchase-receiving">去看采购收货</RouterLink>
           </div>
         </div>
-    </section>
+      </section>
     </div>
 
     <section v-if="importResult" class="page-section">
@@ -443,6 +528,96 @@ onMounted(async () => {
         </article>
       </div>
     </section>
+
+    <el-dialog v-model="feishuPreviewDialogVisible" title="确认加入采购收货的飞书物品" width="92%">
+      <div class="dialog-summary">
+        <span>抓取实例：{{ feishuPreviewResult?.fetched_instance_count ?? 0 }} 条</span>
+        <span>可导入实例：{{ feishuPreviewResult?.importable_instance_count ?? 0 }} 条</span>
+      </div>
+
+      <div class="dialog-summary preview-selection-summary">
+        <span>已勾选采购单：{{ selectedFeishuInstanceCodes.length }} 条</span>
+        <span>已勾选物品：{{ selectedFeishuItemCount }} 条</span>
+      </div>
+
+      <div class="selection-toolbar preview-toolbar">
+        <label class="checkbox-chip">
+          <input :checked="allImportableFeishuSelected" type="checkbox" @change="toggleSelectAllFeishuOrders" />
+          <span>全选当前可导入采购单</span>
+        </label>
+        <span class="section-meta">已导入或未解析成功的实例会保留展示，但不可重复加入。</span>
+      </div>
+
+      <div class="stack-list feishu-preview-list">
+        <article
+          v-for="order in feishuPreviewOrders"
+          :key="order.instance_code"
+          class="data-row clickable triplet preview-order-card"
+          :class="{ active: selectedFeishuInstanceCodes.includes(order.instance_code), disabled: !order.can_import }"
+          @click="order.can_import ? toggleFeishuOrderSelection(order.instance_code) : undefined"
+        >
+          <div class="row-checkbox" @click.stop>
+            <input
+              :checked="selectedFeishuInstanceCodes.includes(order.instance_code)"
+              :disabled="!order.can_import"
+              type="checkbox"
+              @change="toggleFeishuOrderSelection(order.instance_code)"
+            />
+          </div>
+
+          <div class="data-row-main">
+            <div class="data-row-head">
+              <strong>{{ order.requester || order.creator_name || order.title || '未命名飞书采购单' }}</strong>
+              <div class="preview-order-badges">
+                <span :class="['console-badge', order.can_import ? 'ok' : 'warn']">
+                  {{ order.can_import ? '待确认导入' : order.skip_reason || '不可导入' }}
+                </span>
+                <span class="console-badge info">{{ order.items.length }} 条物品</span>
+              </div>
+            </div>
+
+            <div class="data-row-meta">
+              <span>实例号：{{ order.instance_code }}</span>
+              <span>流水号：{{ order.serial_number || '未记录' }}</span>
+              <span>项目：{{ order.project_name || '未填' }}</span>
+              <span>类别：{{ order.purchase_category || '未填' }}</span>
+              <span>请购日期：{{ formatDate(order.requested_at) }}</span>
+              <span>审批状态：{{ order.status || '未记录' }}</span>
+            </div>
+
+            <div class="preview-item-list">
+              <div v-for="item in order.items" :key="`${order.instance_code}-${item.line_no}`" class="preview-item-row">
+                <div class="preview-item-main">
+                  <strong>{{ item.material_name }}</strong>
+                  <span>{{ item.specification || '未填规格' }}</span>
+                </div>
+                <div class="preview-item-meta">
+                  <span>数量：{{ item.requested_quantity || '--' }}</span>
+                  <span>金额：{{ item.total_amount || '--' }}</span>
+                  <span>{{ item.inventory_item_id ? '已匹配库存项' : '未匹配库存项' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <div v-if="!feishuPreviewOrders.length" class="empty-state">本次没有可展示的飞书采购明细。</div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <button class="action-link ghost" type="button" @click="feishuPreviewDialogVisible = false">先不导入</button>
+          <button
+            class="primary-button"
+            :disabled="confirmingFeishuImport || !selectedFeishuInstanceCodes.length"
+            type="button"
+            @click="confirmFeishuImport"
+          >
+            {{ confirmingFeishuImport ? '导入中...' : `确认加入采购收货（${selectedFeishuItemCount} 条物品）` }}
+          </button>
+        </div>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="resultDialogVisible" title="本次采购导入清单" width="90%">
       <div class="dialog-summary">

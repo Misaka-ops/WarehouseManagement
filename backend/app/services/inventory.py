@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..models import InventoryItem, InventoryTransaction, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, TransactionType
 from ..schemas import InventoryDashboardResponse, InventoryItemRead, InventorySummary, PurchaseReceiveCandidate
+from .bootstrap import get_or_create_location, normalize_text
 
 
 def build_dashboard(session: Session) -> InventoryDashboardResponse:
@@ -127,7 +128,7 @@ def delete_inventory_items(session: Session, item_ids: list[int]) -> list[int]:
 def list_pending_purchase_receipts(session: Session, limit: int = 40) -> list[PurchaseReceiveCandidate]:
     rows = session.scalars(
         select(PurchaseOrderItem)
-        .options(joinedload(PurchaseOrderItem.order))
+        .options(joinedload(PurchaseOrderItem.order), joinedload(PurchaseOrderItem.inventory_item).joinedload(InventoryItem.location))
         .order_by(PurchaseOrderItem.id.desc())
     ).all()
 
@@ -153,6 +154,7 @@ def list_pending_purchase_receipts(session: Session, limit: int = 40) -> list[Pu
                 unit=item.unit,
                 expected_arrival=item.expected_arrival,
                 inventory_item_id=item.inventory_item_id,
+                location_name=item.inventory_item.location.name if item.inventory_item and item.inventory_item.location else None,
             )
         )
 
@@ -168,6 +170,7 @@ def receive_purchase_item(
     purchase_item_id: int,
     quantity: Decimal,
     occurred_on: date,
+    location_name: str | None,
     operator_name: str | None,
     reference_code: str | None,
     notes: str | None,
@@ -184,6 +187,7 @@ def receive_purchase_item(
     if quantity > pending_quantity:
         raise ValueError("Receipt quantity exceeds the pending quantity.")
 
+    location = get_or_create_location(session, normalize_text(location_name))
     inventory_item = purchase_item.inventory_item
     if not inventory_item:
         inventory_item = InventoryItem(
@@ -193,12 +197,15 @@ def receive_purchase_item(
             material_name=purchase_item.material_name,
             specification=purchase_item.specification,
             unit=purchase_item.unit,
+            location=location,
             quantity_on_hand=Decimal("0"),
             notes=None,
         )
         session.add(inventory_item)
         session.flush()
         purchase_item.inventory_item_id = inventory_item.id
+    elif location is not None:
+        inventory_item.location = location
 
     inventory_item.quantity_on_hand = Decimal(inventory_item.quantity_on_hand) + quantity
     inventory_item.last_receipt_at = occurred_on

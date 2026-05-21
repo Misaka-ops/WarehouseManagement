@@ -24,6 +24,7 @@ const receiptForm = ref<PurchaseReceivePayload>({
   purchase_item_id: 0,
   quantity: 1,
   occurred_on: new Date().toISOString().slice(0, 10),
+  location_name: '',
   operator_name: '',
   reference_code: 'RK-PO-',
   notes: '',
@@ -44,6 +45,7 @@ function syncReceiptForm(item: PurchasePendingReceipt) {
   choosePendingReceipt(item)
   receiptForm.value.purchase_item_id = item.purchase_item_id
   receiptForm.value.quantity = Number(item.pending_quantity)
+  receiptForm.value.location_name = item.location_name ?? ''
   receiptForm.value.notes = `${item.material_name} 收货`
 }
 
@@ -95,6 +97,7 @@ async function handleBulkDelete() {
       syncReceiptForm(selectedPendingReceipt.value)
     } else {
       receiptForm.value.purchase_item_id = 0
+      receiptForm.value.location_name = ''
     }
 
     ElMessage.success(`已删除 ${response.deleted_count} 条采购明细。`)
@@ -115,6 +118,7 @@ async function submitPurchaseReceipt() {
           purchase_item_id: item.purchase_item_id,
           quantity: Number(item.pending_quantity),
           occurred_on: receiptForm.value.occurred_on,
+          location_name: receiptForm.value.location_name?.trim() || undefined,
           operator_name: receiptForm.value.operator_name,
           reference_code: receiptForm.value.reference_code,
           notes: receiptForm.value.notes?.trim() || `${item.material_name} 收货`,
@@ -130,6 +134,7 @@ async function submitPurchaseReceipt() {
         syncReceiptForm(nextReceipt)
       } else {
         receiptForm.value.purchase_item_id = 0
+        receiptForm.value.location_name = ''
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '批量采购收货失败'
@@ -281,11 +286,13 @@ onMounted(async () => {
           <template v-if="isBatchReceiveMode">
             <p>已勾选明细：{{ selectedPendingReceipts.length }} 条</p>
             <p>待收数量：将按每条明细当前待收数量分别入库</p>
+            <p>区位：{{ receiptForm.location_name || '本次未统一填写' }}</p>
             <p>说明：将按每条明细当前待收数量分别入库。</p>
           </template>
           <template v-else>
             <p>供应商：{{ selectedPendingReceipt?.supplier_name || '未填' }}</p>
             <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
+            <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
             <p>待收数量：{{ selectedPendingReceipt?.pending_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
           </template>
         </div>
@@ -305,15 +312,20 @@ onMounted(async () => {
 
           <div class="toolbar-grid dual">
             <label class="field">
-              <span>操作人</span>
-              <input v-model="receiptForm.operator_name" type="text" placeholder="仓管员" />
+              <span>{{ isBatchReceiveMode ? '统一区位' : '区位' }}</span>
+              <input v-model="receiptForm.location_name" type="text" placeholder="例如 A-01-03" />
             </label>
 
             <label class="field">
-              <span>入库单号</span>
-              <input v-model="receiptForm.reference_code" type="text" placeholder="例如 RK-PO-01" />
+              <span>操作人</span>
+              <input v-model="receiptForm.operator_name" type="text" placeholder="仓管员" />
             </label>
           </div>
+
+          <label class="field">
+            <span>入库单号</span>
+            <input v-model="receiptForm.reference_code" type="text" placeholder="例如 RK-PO-01" />
+          </label>
 
           <label class="field">
             <span>备注</span>
