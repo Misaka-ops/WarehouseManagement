@@ -32,10 +32,17 @@ const importing = ref(false)
 const syncingFeishu = ref(false)
 const savingStates = ref(false)
 const savingAdjustments = ref(false)
+const feishuTimeRangeDays = ref(10)
 const importResult = ref<PurchaseImportResponse | null>(null)
 const feishuSyncResult = ref<FeishuPurchaseImportResponse | null>(null)
 const resultDialogVisible = ref(false)
 const editableItems = ref<EditableImportItem[]>([])
+
+const feishuTimeRangeOptions = [
+  { label: '近一天', value: 1 },
+  { label: '近五天', value: 5 },
+  { label: '近十天', value: 10 },
+]
 
 const rowInputs = reactive<Record<string, number>>({})
 
@@ -144,23 +151,26 @@ async function submitImport() {
 async function syncFeishuImport() {
   syncingFeishu.value = true
   try {
-    const response = await importFeishuPurchase({})
+    const response = await importFeishuPurchase({ time_range_days: feishuTimeRangeDays.value })
     feishuSyncResult.value = response
     await Promise.all([loadDashboard({ quiet: true }), loadPendingReceipts()])
 
     if (response.warnings.length) {
-      ElMessage.warning(`飞书同步完成，但有 ${response.warnings.length} 条警告。`)
-      response.warnings.forEach((warning) => ElMessage.warning(warning))
+      ElMessage.warning(`抓取 ${response.fetched_instance_count} 条实例，飞书同步完成，但有 ${response.warnings.length} 条详情拉取失败。`)
     } else {
-      ElMessage.success('飞书同步完成。')
+      ElMessage.success(`抓取 ${response.fetched_instance_count} 条实例，飞书同步完成。`)
     }
 
-    if (response.imported_order_count > 0) {
+    if (response.reimported_order_count > 0) {
       ElMessage.success(
-        `导入 ${response.imported_order_count} 单 / ${response.imported_item_count} 条明细。`,
+        `抓取 ${response.fetched_instance_count} 条实例，强制重跑 ${response.reimported_order_count} 单 / ${response.reimported_item_count} 条明细。`,
+      )
+    } else if (response.imported_order_count > 0) {
+      ElMessage.success(
+        `抓取 ${response.fetched_instance_count} 条实例，导入 ${response.imported_order_count} 单 / ${response.imported_item_count} 条明细。`,
       )
     } else {
-      ElMessage.success('本次没有新增可导入的飞书采购单。')
+      ElMessage.success(`抓取 ${response.fetched_instance_count} 条实例，本次没有新增可导入的飞书采购单。`)
     }
   } catch (error) {
     const message = getErrorMessage(error, '飞书采购同步失败')
@@ -284,6 +294,14 @@ onMounted(async () => {
             <article class="note-card warm-note">
               <strong>飞书同步</strong>
               <p>使用后端已配置的飞书采购审批编码拉取审批实例，同步后会刷新看板和待收货列表。</p>
+              <label class="field compact-field">
+                <span>同步范围</span>
+                <select v-model.number="feishuTimeRangeDays">
+                  <option v-for="option in feishuTimeRangeOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
             </article>
           </div>
 

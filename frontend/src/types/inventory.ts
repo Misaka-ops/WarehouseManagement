@@ -116,6 +116,10 @@ export interface FeishuPurchaseSyncRequest {
   instance_codes?: string[]
   page_size?: number
   max_pages?: number
+  time_range_days?: number | null
+  filter_imported?: boolean
+  filter_historical?: boolean
+  force_reimport?: boolean
   locale?: string
 }
 
@@ -146,12 +150,16 @@ export interface FeishuPurchaseSyncResponse {
   created_instance_count: number
   updated_instance_count: number
   skipped_instance_count: number
+  filtered_imported_instance_count: number
+  filtered_historical_instance_count: number
   sync_state: FeishuApprovalSyncState
   instances: FeishuApprovalInstanceRecord[]
   warnings: string[]
 }
 
 export interface FeishuPurchaseImportResponse extends FeishuPurchaseSyncResponse {
+  reimported_order_count: number
+  reimported_item_count: number
   imported_order_count: number
   imported_item_count: number
   skipped_import_count: number

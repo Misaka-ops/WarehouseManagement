@@ -4,7 +4,8 @@ import json
 import ssl
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -183,21 +184,22 @@ class FeishuClient:
         *,
         page_size: int,
         page_token: str | None,
-        start_time: str | None = None,
-        end_time: str | None = None,
+        instance_start_time_from: str | None = None,
+        instance_start_time_to: str | None = None,
     ) -> FeishuPage:
         params: dict[str, Any] = {"page_size": page_size}
         if page_token:
             params["page_token"] = page_token
-        if start_time:
-            params["start_time"] = start_time
-        if end_time:
-            params["end_time"] = end_time
+        body: dict[str, Any] = {"approval_code": approval_code}
+        if instance_start_time_from:
+            body["instance_start_time_from"] = instance_start_time_from
+        if instance_start_time_to:
+            body["instance_start_time_to"] = instance_start_time_to
         payload = self._request_candidates(
             "POST",
             [f"{self.settings.feishu_open_api_base_url}/approval/v4/instances/query"],
             params=params,
-            json_body={"approval_code": approval_code},
+            json_body=body,
         )
         data = payload.get("data") if isinstance(payload, dict) else {}
         if not isinstance(data, dict):
@@ -348,10 +350,11 @@ def _extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def _extract_instance_codes(payload: dict[str, Any]) -> list[str]:
+def _extract_instance_codes(payload: dict[str, Any], *, allowed_statuses: set[str] | None = None) -> list[str]:
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         data = payload if isinstance(payload, dict) else {}
+    normalized_allowed_statuses = {status.strip().upper() for status in allowed_statuses} if allowed_statuses else None
 
     raw_list = data.get("instance_code_list")
     if isinstance(raw_list, list):
@@ -378,6 +381,10 @@ def _extract_instance_codes(payload: dict[str, Any]) -> list[str]:
                 continue
             if not isinstance(item, dict):
                 continue
+            if normalized_allowed_statuses is not None:
+                status = _extract_status(item)
+                if status is None or status.strip().upper() not in normalized_allowed_statuses:
+                    continue
             nested_instance = item.get("instance")
             if isinstance(nested_instance, dict):
                 code_value = nested_instance.get("code")
@@ -392,6 +399,10 @@ def _extract_instance_codes(payload: dict[str, Any]) -> list[str]:
 
     codes: list[str] = []
     for item in _extract_items(payload):
+        if normalized_allowed_statuses is not None:
+            status = _extract_status(item)
+            if status is None or status.strip().upper() not in normalized_allowed_statuses:
+                continue
         code = _extract_instance_code(item)
         if code and code not in codes:
             codes.append(code)
@@ -670,6 +681,40 @@ def _get_or_create_sync_state(session: Session, approval_code: str) -> FeishuApp
     return state
 
 
+def _resolve_time_window(days: int | None) -> tuple[str | None, str | None]:
+    if days is None:
+        return None, None
+    if days not in {1, 5, 10}:
+        raise FeishuIntegrationError("仅支持近一天、近五天、近十天的同步范围。")
+
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    return str(int(start_time.timestamp() * 1000)), str(int(end_time.timestamp() * 1000))
+
+
+def _fetch_instance_detail_with_retry(
+    client: FeishuClient,
+    instance_code: str,
+    *,
+    locale: str,
+    retries: int = 3,
+) -> dict[str, Any]:
+    last_error: FeishuIntegrationError | None = None
+    for attempt in range(retries + 1):
+        try:
+            return client.get_approval_instance(instance_code, locale=locale)
+        except FeishuIntegrationError as exc:
+            last_error = exc
+            message = str(exc)
+            transient = "UNEXPECTED_EOF_WHILE_READING" in message or "EOF occurred in violation of protocol" in message
+            if attempt >= retries or not transient:
+                break
+            time.sleep(0.75 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise FeishuIntegrationError(f"{instance_code}: 飞书实例详情获取失败。")
+
+
 def serialize_feishu_instance(record: FeishuApprovalInstanceRecord) -> FeishuApprovalInstanceRecordRead:
     return FeishuApprovalInstanceRecordRead.model_validate(record)
 
@@ -739,8 +784,10 @@ def sync_feishu_purchase_instances(
         raise FeishuIntegrationError("请先配置飞书采购审批编码，或在请求体中传入 approval_code。")
 
     client = FeishuClient()
+    client.tenant_access_token
     warnings: list[str] = []
     instance_codes: list[str] = []
+    start_time, end_time = _resolve_time_window(payload.time_range_days)
 
     if payload.instance_codes:
         for code in payload.instance_codes:
@@ -754,8 +801,10 @@ def sync_feishu_purchase_instances(
                 approval_code,
                 page_size=payload.page_size,
                 page_token=page_token,
+                instance_start_time_from=start_time,
+                instance_start_time_to=end_time,
             )
-            for instance_code in _extract_instance_codes(page.payload):
+            for instance_code in _extract_instance_codes(page.payload, allowed_statuses={"APPROVED", "PASSED", "DONE", "COMPLETED", "SUCCESS"}):
                 if instance_code and instance_code not in instance_codes:
                     instance_codes.append(instance_code)
             if not page.has_more or not page.next_page_token:
@@ -766,19 +815,49 @@ def sync_feishu_purchase_instances(
     updated_count = 0
     last_synced_instance_code: str | None = None
     records: list[FeishuApprovalInstanceRecord] = []
+    detail_payloads: dict[str, dict[str, Any]] = {}
+    created_instance_codes: set[str] = set()
+    apply_historical_filter = False
+    apply_imported_filter = False
+
+    if instance_codes:
+        worker_count = min(8, len(instance_codes))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_map = {
+                executor.submit(_fetch_instance_detail_with_retry, client, instance_code, locale=payload.locale): instance_code
+                for instance_code in instance_codes
+            }
+            for future in as_completed(future_map):
+                instance_code = future_map[future]
+                try:
+                    detail_payloads[instance_code] = future.result()
+                except FeishuIntegrationError as exc:
+                    warnings.append(f"{instance_code}: {exc}")
 
     for instance_code in instance_codes:
-        try:
-            detail_payload = client.get_approval_instance(instance_code, locale=payload.locale)
-            record, created = _upsert_instance_record(session, approval_code, detail_payload)
-            records.append(record)
-            last_synced_instance_code = instance_code
-            if created:
-                created_count += 1
-            else:
-                updated_count += 1
-        except FeishuIntegrationError as exc:
-            warnings.append(f"{instance_code}: {exc}")
+        detail_payload = detail_payloads.get(instance_code)
+        if detail_payload is None:
+            continue
+        record, created = _upsert_instance_record(session, approval_code, detail_payload)
+        records.append(record)
+        last_synced_instance_code = instance_code
+        if created:
+            created_count += 1
+            created_instance_codes.add(instance_code)
+        else:
+            updated_count += 1
+
+    historical_instance_codes = {record.instance_code for record in records if record.instance_code not in created_instance_codes}
+    imported_instance_codes: set[str] = set()
+    if records:
+        imported_instance_codes = set(
+            session.scalars(
+                select(FeishuPurchaseOrderMeta.approval_instance_code).where(
+                    FeishuPurchaseOrderMeta.approval_code == approval_code,
+                    FeishuPurchaseOrderMeta.approval_instance_code.in_([record.instance_code for record in records]),
+                )
+            ).all()
+        )
 
     sync_state = _get_or_create_sync_state(session, approval_code)
     sync_state.last_synced_at = _now()
@@ -786,6 +865,7 @@ def sync_feishu_purchase_instances(
     sync_state.last_sync_status = "success_with_warnings" if warnings else ("success" if instance_codes else "empty")
     sync_state.last_sync_message = (
         f"同步完成，抓取 {len(instance_codes)} 条实例，新增 {created_count} 条，更新 {updated_count} 条。"
+        + (" 强制重跑模式已开启。" if payload.force_reimport else "")
         + (f" 警告：{'；'.join(warnings[:5])}" if warnings else "")
     )
 
@@ -809,6 +889,8 @@ def sync_feishu_purchase_instances(
         created_instance_count=created_count,
         updated_instance_count=updated_count,
         skipped_instance_count=max(len(instance_codes) - created_count - updated_count, 0),
+        filtered_imported_instance_count=len(imported_instance_codes),
+        filtered_historical_instance_count=len(historical_instance_codes),
         sync_state=serialize_feishu_sync_state(refreshed_state),
         instances=[serialize_feishu_instance(record) for record in refreshed_records],
         warnings=warnings,
@@ -838,6 +920,21 @@ def _build_purchase_order_notes(parsed: ParsedFeishuPurchaseOrder, approval_code
     if parsed.notes:
         source_bits.append(parsed.notes)
     return "；".join(source_bits) if source_bits else None
+
+
+def _purge_feishu_purchase_order(session: Session, instance_code: str) -> bool:
+    existing_meta = session.scalar(
+        select(FeishuPurchaseOrderMeta).where(FeishuPurchaseOrderMeta.approval_instance_code == instance_code)
+    )
+    if existing_meta is None or existing_meta.purchase_order is None:
+        return False
+
+    if any((item.received_quantity or Decimal("0")) > 0 for item in existing_meta.purchase_order.items):
+        raise FeishuIntegrationError(f"{instance_code}: 该采购单已发生收货，禁止强制重跑。")
+
+    session.delete(existing_meta.purchase_order)
+    session.flush()
+    return True
 
 
 def _import_feishu_purchase_instance(
@@ -951,18 +1048,28 @@ def import_feishu_purchase_instances(
     sync_response = sync_feishu_purchase_instances(session, payload)
     imported_order_count = 0
     imported_item_count = 0
+    reimported_order_count = 0
+    reimported_item_count = 0
     skipped_import_count = 0
     warnings = list(sync_response.warnings)
+    force_reimport = bool(payload.force_reimport)
 
     for record in sync_response.instances:
         if not _is_approved_instance(record.status):
             skipped_import_count += 1
-            warnings.append(f"{record.instance_code}: 仅导入已通过的采购申请。")
             continue
 
-        if session.scalar(
+        existing_meta = session.scalar(
             select(FeishuPurchaseOrderMeta).where(FeishuPurchaseOrderMeta.approval_instance_code == record.instance_code)
-        ):
+        )
+        if existing_meta is not None and force_reimport:
+            try:
+                _purge_feishu_purchase_order(session, record.instance_code)
+            except FeishuIntegrationError as exc:
+                skipped_import_count += 1
+                warnings.append(str(exc))
+                continue
+        elif existing_meta is not None:
             skipped_import_count += 1
             continue
 
@@ -999,7 +1106,10 @@ def import_feishu_purchase_instances(
                 )
             )
 
-            imported_order_count += 1
+            if existing_meta is not None and force_reimport:
+                reimported_order_count += 1
+            else:
+                imported_order_count += 1
             for row in parsed.items:
                 inventory_item = _match_inventory_item(session, row.material_name, row.specification)
                 purchase_item = PurchaseOrderItem(
@@ -1025,7 +1135,10 @@ def import_feishu_purchase_instances(
                         source_line_no=row.line_no,
                     )
                 )
-                imported_item_count += 1
+                if existing_meta is not None and force_reimport:
+                    reimported_item_count += 1
+                else:
+                    imported_item_count += 1
         except FeishuIntegrationError as exc:
             skipped_import_count += 1
             warnings.append(str(exc))
@@ -1037,10 +1150,14 @@ def import_feishu_purchase_instances(
         fetched_instance_count=sync_response.fetched_instance_count,
         created_instance_count=sync_response.created_instance_count,
         updated_instance_count=sync_response.updated_instance_count,
+        reimported_order_count=reimported_order_count,
+        reimported_item_count=reimported_item_count,
         imported_order_count=imported_order_count,
         imported_item_count=imported_item_count,
         skipped_instance_count=sync_response.skipped_instance_count,
         skipped_import_count=skipped_import_count,
+        filtered_imported_instance_count=sync_response.filtered_imported_instance_count,
+        filtered_historical_instance_count=sync_response.filtered_historical_instance_count,
         sync_state=sync_response.sync_state,
         instances=sync_response.instances,
         warnings=warnings,

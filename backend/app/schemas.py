@@ -133,6 +133,10 @@ class FeishuPurchaseSyncRequest(BaseModel):
     instance_codes: list[str] = Field(default_factory=list)
     page_size: int = Field(default=20, ge=1, le=100)
     max_pages: int = Field(default=3, ge=1, le=20)
+    time_range_days: int | None = Field(default=None, ge=1, le=365)
+    filter_imported: bool = False
+    filter_historical: bool = False
+    force_reimport: bool = False
     locale: str = "zh-CN"
 
 
@@ -184,6 +188,8 @@ class FeishuPurchaseSyncResponse(BaseModel):
     created_instance_count: int
     updated_instance_count: int
     skipped_instance_count: int
+    filtered_imported_instance_count: int = 0
+    filtered_historical_instance_count: int = 0
     sync_state: FeishuApprovalSyncStateRead
     instances: list[FeishuApprovalInstanceRecordRead]
     warnings: list[str] = Field(default_factory=list)
@@ -194,10 +200,14 @@ class FeishuPurchaseImportResponse(BaseModel):
     fetched_instance_count: int
     created_instance_count: int
     updated_instance_count: int
+    reimported_order_count: int = 0
+    reimported_item_count: int = 0
     imported_order_count: int
     imported_item_count: int
     skipped_instance_count: int
     skipped_import_count: int
+    filtered_imported_instance_count: int = 0
+    filtered_historical_instance_count: int = 0
     sync_state: FeishuApprovalSyncStateRead
     instances: list[FeishuApprovalInstanceRecordRead]
     warnings: list[str] = Field(default_factory=list)

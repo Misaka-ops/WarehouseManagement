@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     feishu_purchase_approval_code: str | None = None
     feishu_open_api_base_url: str = "https://open.feishu.cn/open-apis"
     feishu_approval_api_base_url: str = "https://www.feishu.cn/approval/openapi/v2"
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8")
 
 
 @lru_cache
