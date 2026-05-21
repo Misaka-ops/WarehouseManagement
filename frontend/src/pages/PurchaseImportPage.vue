@@ -325,6 +325,54 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section v-if="importResult?.imported_items?.length" class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">最近导入明细</p>
+          <h3>导入清单</h3>
+        </div>
+        <span class="section-meta">{{ importResult.imported_item_count }} 条</span>
+      </div>
+
+      <div class="console-table">
+        <div class="console-table-scroll">
+          <div class="console-table-header import-table-grid">
+            <span class="console-header-cell">物料</span>
+            <span class="console-header-cell">规格</span>
+            <span class="console-header-cell">供应商</span>
+            <span class="console-header-cell">项目</span>
+            <span class="console-header-cell">来源</span>
+            <span class="console-header-cell">数量</span>
+            <span class="console-header-cell">对齐状态</span>
+            <span class="console-header-cell">操作</span>
+          </div>
+
+          <article v-for="item in importResult.imported_items" :key="item.purchase_item_id" class="console-table-row import-table-grid">
+            <div class="console-cell">
+              <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+              <span class="console-subtext">#{{ item.purchase_item_id }}</span>
+            </div>
+            <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填'">{{ item.project_name || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="`${item.sheet_name} / 第 ${item.source_row_number} 行`">{{ item.sheet_name }} / 第 {{ item.source_row_number }} 行</div>
+            <div class="console-cell">
+              <span class="console-badge info">{{ item.requested_quantity || '--' }} {{ item.unit || '件' }}</span>
+            </div>
+            <div class="console-cell">
+              <span :class="['console-badge', item.inventory_item_id ? 'ok' : 'warn']">
+                {{ item.inventory_item_id ? '已匹配' : '待匹配' }}
+              </span>
+            </div>
+            <div class="console-row-actions">
+              <button class="console-action ghost" type="button" @click="resultDialogVisible = true">编辑</button>
+              <RouterLink class="console-action secondary" to="/purchase-receiving">去收货</RouterLink>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section v-if="feishuSyncResult" class="page-section">
       <div class="section-heading">
         <div>

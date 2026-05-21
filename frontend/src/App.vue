@@ -35,8 +35,8 @@ const navGroups: NavGroup[] = [
   },
 ]
 
-const pageEyebrow = computed(() => String(route.meta.eyebrow ?? 'Warehouse Flow'))
-const pageTitle = computed(() => String(route.meta.title ?? '仓储运营台'))
+const pageEyebrow = computed(() => String(route.meta.eyebrow ?? 'Midnight Control'))
+const pageTitle = computed(() => String(route.meta.title ?? '仓储控制台'))
 const pageDescription = computed(() => String(route.meta.description ?? ''))
 </script>
 
@@ -44,8 +44,9 @@ const pageDescription = computed(() => String(route.meta.description ?? ''))
   <div class="app-frame">
     <aside class="sidebar-shell">
       <div class="brand-panel">
-        <p class="eyebrow">Warehouse Flow</p>
-        <h1>仓储运营台</h1>
+        <p class="eyebrow">MIDNIGHT CONTROL</p>
+        <h1>仓储控制台</h1>
+        <p class="brand-copy">deep black · blue data · amber highlights</p>
       </div>
 
       <div class="nav-groups">

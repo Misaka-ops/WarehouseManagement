@@ -132,145 +132,174 @@ onMounted(async () => {
       </div>
     </section>
 
-    <div class="content-grid">
-      <section class="page-section">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">库存列表</p>
-            <h3>快速定位物料</h3>
-          </div>
-          <span class="section-meta">{{ filteredItems.length }} / {{ inventoryItems.length }}</span>
+    <section class="page-section sticky-head-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">库存列表</p>
+          <h3>快速定位物料</h3>
         </div>
+        <span class="section-meta">{{ filteredItems.length }} / {{ inventoryItems.length }}</span>
+      </div>
 
-        <div class="toolbar-grid">
-          <label class="field">
-            <span>搜索</span>
-            <input v-model="searchKeyword" type="text" placeholder="按物料、规格、供应商、区位搜索" />
-          </label>
+      <div class="toolbar-grid">
+        <label class="field">
+          <span>搜索</span>
+          <input v-model="searchKeyword" type="text" placeholder="按物料、规格、供应商、区位搜索" />
+        </label>
 
-          <button class="soft-button" :class="{ active: lowStockOnly }" type="button" @click="lowStockOnly = !lowStockOnly">
-            {{ lowStockOnly ? '只看低库存中' : '切到低库存' }}
+        <button class="soft-button" :class="{ active: lowStockOnly }" type="button" @click="lowStockOnly = !lowStockOnly">
+          {{ lowStockOnly ? '只看低库存中' : '切到低库存' }}
+        </button>
+      </div>
+
+      <div class="selection-toolbar">
+        <label class="checkbox-chip">
+          <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
+          <span>全选当前筛选结果</span>
+        </label>
+
+        <div class="selection-actions">
+          <span>{{ selectedDeleteIds.length }} 项待删除</span>
+          <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
+            {{ deleting ? '删除中...' : '删除勾选库存' }}
           </button>
         </div>
-
-        <div class="selection-toolbar">
-          <label class="checkbox-chip">
-            <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
-            <span>全选当前筛选结果</span>
-          </label>
-
-          <div class="selection-actions">
-            <span>{{ selectedDeleteIds.length }} 项待删除</span>
-            <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
-              {{ deleting ? '删除中...' : '删除勾选库存' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="inventory-list">
-          <article
-            v-for="item in filteredItems"
-            :key="item.id"
-            class="inventory-row"
-            :class="{ active: item.id === selectedItemId }"
-            @click="selectItem(item)"
-          >
-            <label class="row-checkbox" @click.stop>
-              <input
-                :checked="selectedDeleteIds.includes(item.id)"
-                type="checkbox"
-                @change="toggleItemSelection(item.id)"
-              />
-            </label>
-
-            <div class="row-main">
-              <div class="row-heading">
-                <h4>{{ item.material_name }}</h4>
-                <span :class="['stock-chip', Number(item.quantity_on_hand) <= 5 ? 'danger' : 'safe']">
-                  {{ item.quantity_on_hand }} {{ item.unit || '件' }}
-                </span>
-              </div>
-
-              <div class="row-meta">
-                <span>规格：{{ item.specification || '未填' }}</span>
-                <span>供应商：{{ item.supplier_name || '未填' }}</span>
-                <span>区位：{{ item.location_name || '未填' }}</span>
-                <span>项目：{{ item.project_name || '未填' }}</span>
-              </div>
-            </div>
-          </article>
-
-          <div v-if="loading" class="empty-state">正在加载库存数据...</div>
-          <div v-else-if="!filteredItems.length" class="empty-state">没有匹配到库存项目。</div>
-        </div>
-      </section>
-
-      <div class="page-stack">
-        <section class="page-section">
-          <div class="section-heading">
-            <div>
-              <p class="section-kicker">当前物料</p>
-              <h3>{{ selectedItem?.material_name || '请选择一个库存项目' }}</h3>
-            </div>
-            <span class="section-meta">总览详情</span>
-          </div>
-
-          <div v-if="selectedItem" class="stat-grid">
-            <article class="stat-card">
-              <span>现有库存</span>
-              <strong>{{ selectedItem.quantity_on_hand }}</strong>
-              <small>{{ selectedItem.unit || '件' }}</small>
-            </article>
-            <article class="stat-card">
-              <span>规格型号</span>
-              <strong class="minor">{{ selectedItem.specification || '未填' }}</strong>
-            </article>
-            <article class="stat-card">
-              <span>区位</span>
-              <strong class="minor">{{ selectedItem.location_name || '未填' }}</strong>
-            </article>
-            <article class="stat-card">
-              <span>最近出库</span>
-              <strong class="minor">{{ selectedItem.last_issue_at || '未记录' }}</strong>
-            </article>
-          </div>
-
-          <div class="link-row sticky-links">
-            <RouterLink class="action-link ghost" to="/inventory-import">去做库存导入</RouterLink>
-            <RouterLink class="action-link ghost" to="/inventory-export">去做库存导出</RouterLink>
-            <RouterLink class="action-link" to="/receipt">去做入库</RouterLink>
-            <RouterLink class="action-link secondary" to="/issue">去做出库</RouterLink>
-          </div>
-        </section>
-
-        <section class="page-section">
-          <div class="section-heading">
-            <div>
-              <p class="section-kicker">流水</p>
-              <h3>最近 12 条记录</h3>
-            </div>
-            <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
-          </div>
-
-          <div class="stack-list">
-            <article v-for="tx in itemTransactions" :key="tx.id" class="history-row">
-              <div class="history-head">
-                <strong :class="tx.transaction_type">{{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}</strong>
-                <span>{{ tx.occurred_on }}</span>
-              </div>
-              <div class="history-body">
-                <span>数量：{{ tx.quantity }}</span>
-                <span>操作人：{{ tx.operator_name || '未填' }}</span>
-                <span>单号：{{ tx.reference_code || '未填' }}</span>
-              </div>
-              <p v-if="tx.notes" class="history-notes">{{ tx.notes }}</p>
-            </article>
-
-            <div v-if="historyLoading" class="empty-state">正在加载流水...</div>
-            <div v-else-if="!itemTransactions.length" class="empty-state">当前物料还没有流水记录。</div>
-          </div>
-        </section>
       </div>
-    </div>
+
+      <div class="console-table sticky-head-table">
+        <div class="console-table-scroll">
+          <table class="console-data-table">
+            <colgroup>
+              <col style="width: 56px" />
+              <col style="width: 240px" />
+              <col style="width: 220px" />
+              <col style="width: 110px" />
+              <col style="width: 130px" />
+              <col style="width: 130px" />
+              <col style="width: 150px" />
+              <col style="width: 150px" />
+              <col style="width: 160px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="console-data-head center">选中</th>
+                <th>物料</th>
+                <th>规格</th>
+                <th>区位</th>
+                <th>采购人</th>
+                <th>库存</th>
+                <th>最近入库</th>
+                <th>最近出库</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in filteredItems"
+                :key="item.id"
+                class="console-data-row interactive"
+                :class="{ active: item.id === selectedItemId }"
+                @click="selectItem(item)"
+              >
+                <td class="console-data-cell center">
+                  <label class="console-checkbox" @click.stop>
+                    <input
+                      :checked="selectedDeleteIds.includes(item.id)"
+                      type="checkbox"
+                      @change="toggleItemSelection(item.id)"
+                    />
+                  </label>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell">
+                    <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+                    <span class="console-subtext">#{{ item.id }}</span>
+                  </div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell">
+                    <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
+                      {{ item.quantity_on_hand }} {{ item.unit || '件' }}
+                    </span>
+                  </div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-row-actions" @click.stop>
+                    <RouterLink class="console-action ghost" to="/receipt">入库</RouterLink>
+                    <RouterLink class="console-action secondary" to="/issue">出库</RouterLink>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="loading" class="console-empty">正在加载库存数据...</div>
+        <div v-else-if="!filteredItems.length" class="console-empty">没有匹配到库存项目。</div>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">流水</p>
+          <h3>最近 12 条记录</h3>
+        </div>
+        <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
+      </div>
+
+      <div class="link-row sticky-links">
+        <RouterLink class="action-link ghost" to="/inventory-import">去做库存导入</RouterLink>
+        <RouterLink class="action-link ghost" to="/inventory-export">去做库存导出</RouterLink>
+        <RouterLink class="action-link" to="/receipt">去做入库</RouterLink>
+        <RouterLink class="action-link secondary" to="/issue">去做出库</RouterLink>
+      </div>
+
+      <div class="console-table">
+        <div class="console-table-scroll">
+          <div class="console-table-header history-table-grid">
+            <span class="console-header-cell">类型</span>
+            <span class="console-header-cell">时间</span>
+            <span class="console-header-cell">数量</span>
+            <span class="console-header-cell">操作人</span>
+            <span class="console-header-cell">单号</span>
+            <span class="console-header-cell">备注</span>
+          </div>
+
+          <article v-for="tx in itemTransactions" :key="tx.id" class="console-table-row history-table-grid">
+            <div class="console-cell">
+              <span :class="['console-badge', tx.transaction_type === 'receipt' ? 'ok' : 'warn']">
+                {{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}
+              </span>
+            </div>
+            <div class="console-cell muted console-nowrap" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
+            <div class="console-cell">
+              <strong>{{ tx.quantity }}</strong>
+            </div>
+            <div class="console-cell muted console-clamp-2" :title="tx.operator_name || '未填'">{{ tx.operator_name || '未填' }}</div>
+            <div class="console-cell muted console-nowrap" :title="tx.reference_code || '未填'">{{ tx.reference_code || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="tx.notes || '无'">{{ tx.notes || '无' }}</div>
+          </article>
+        </div>
+
+        <div v-if="historyLoading" class="console-empty">正在加载流水...</div>
+        <div v-else-if="!itemTransactions.length" class="console-empty">当前物料还没有流水记录。</div>
+      </div>
+    </section>
   </div>
 </template>

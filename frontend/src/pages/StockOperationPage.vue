@@ -179,72 +179,52 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="inventory-list">
-        <article
-          v-for="item in filteredItems"
-          :key="item.id"
-          class="inventory-row"
-          :class="{ active: item.id === selectedItemId }"
-          @click="chooseInventoryItem(item)"
-        >
-          <div class="row-main">
-            <div class="row-heading">
-              <h4>{{ item.material_name }}</h4>
-              <span :class="['stock-chip', Number(item.quantity_on_hand) <= 5 ? 'danger' : 'safe']">
+      <div class="console-table">
+        <div class="console-table-scroll">
+          <div class="console-table-header inventory-pick-table-grid">
+            <span class="console-header-cell">物料</span>
+            <span class="console-header-cell">规格</span>
+            <span class="console-header-cell">供应商</span>
+            <span class="console-header-cell">区位</span>
+            <span class="console-header-cell">项目</span>
+            <span class="console-header-cell">库存</span>
+            <span class="console-header-cell">最近入库</span>
+            <span class="console-header-cell">操作</span>
+          </div>
+
+          <article
+            v-for="item in filteredItems"
+            :key="item.id"
+            class="console-table-row inventory-pick-table-grid interactive"
+            :class="{ active: item.id === selectedItemId }"
+            @click="chooseInventoryItem(item)"
+          >
+            <div class="console-cell">
+              <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+              <span class="console-subtext">#{{ item.id }}</span>
+            </div>
+            <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
+            <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填'">{{ item.project_name || '未填' }}</div>
+            <div class="console-cell">
+              <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
                 {{ item.quantity_on_hand }} {{ item.unit || '件' }}
               </span>
             </div>
-
-            <div class="row-meta">
-              <span>规格：{{ item.specification || '未填' }}</span>
-              <span>供应商：{{ item.supplier_name || '未填' }}</span>
-              <span>区位：{{ item.location_name || '未填' }}</span>
-              <span>项目：{{ item.project_name || '未填' }}</span>
+            <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
+            <div class="console-row-actions" @click.stop>
+              <button class="console-action primary" type="button" @click="chooseInventoryItem(item)">选择</button>
             </div>
-          </div>
-        </article>
+          </article>
+        </div>
 
-        <div v-if="loading" class="empty-state">正在加载库存数据...</div>
-        <div v-else-if="!filteredItems.length" class="empty-state">没有匹配到库存项目。</div>
+        <div v-if="loading" class="console-empty">正在加载库存数据...</div>
+        <div v-else-if="!filteredItems.length" class="console-empty">没有匹配到库存项目。</div>
       </div>
     </section>
 
     <div class="page-stack">
-      <section class="page-section">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">当前操作对象</p>
-            <h3>{{ selectedItem?.material_name || '请选择一个库存项目' }}</h3>
-          </div>
-          <span class="section-meta">{{ pageLabel }}</span>
-        </div>
-
-        <div v-if="selectedItem" class="stat-grid">
-          <article class="stat-card">
-            <span>现有库存</span>
-            <strong>{{ selectedItem.quantity_on_hand }}</strong>
-            <small>{{ selectedItem.unit || '件' }}</small>
-          </article>
-          <article class="stat-card">
-            <span>规格型号</span>
-            <strong class="minor">{{ selectedItem.specification || '未填' }}</strong>
-          </article>
-          <article class="stat-card">
-            <span>区位</span>
-            <strong class="minor">{{ selectedItem.location_name || '未填' }}</strong>
-          </article>
-          <article class="stat-card">
-            <span>最近入库</span>
-            <strong class="minor">{{ selectedItem.last_receipt_at || '未记录' }}</strong>
-          </article>
-        </div>
-
-        <div class="link-row">
-          <RouterLink class="action-link secondary" :to="alternateRoute">{{ alternateLabel }}</RouterLink>
-          <RouterLink class="action-link ghost" to="/overview">返回仓库总览</RouterLink>
-        </div>
-      </section>
-
       <section class="page-section">
         <div class="section-heading">
           <div>
@@ -303,28 +283,56 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
+            <p class="section-kicker">页面切换</p>
+            <h3>{{ selectedItem?.material_name || '请选择一个库存项目' }}</h3>
+          </div>
+          <span class="section-meta">{{ pageLabel }}</span>
+        </div>
+
+        <div class="link-row">
+          <RouterLink class="action-link secondary" :to="alternateRoute">{{ alternateLabel }}</RouterLink>
+          <RouterLink class="action-link ghost" to="/overview">返回仓库总览</RouterLink>
+        </div>
+      </section>
+
+      <section class="page-section">
+        <div class="section-heading">
+          <div>
             <p class="section-kicker">最近流水</p>
             <h3>辅助核对</h3>
           </div>
           <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
         </div>
 
-        <div class="stack-list">
-          <article v-for="tx in itemTransactions" :key="tx.id" class="history-row">
-            <div class="history-head">
-              <strong :class="tx.transaction_type">{{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}</strong>
-              <span>{{ tx.occurred_on }}</span>
+        <div class="console-table">
+          <div class="console-table-scroll">
+            <div class="console-table-header history-table-grid">
+              <span class="console-header-cell">类型</span>
+              <span class="console-header-cell">时间</span>
+              <span class="console-header-cell">数量</span>
+              <span class="console-header-cell">操作人</span>
+              <span class="console-header-cell">单号</span>
+              <span class="console-header-cell">备注</span>
             </div>
-            <div class="history-body">
-              <span>数量：{{ tx.quantity }}</span>
-              <span>操作人：{{ tx.operator_name || '未填' }}</span>
-              <span>单号：{{ tx.reference_code || '未填' }}</span>
-            </div>
-            <p v-if="tx.notes" class="history-notes">{{ tx.notes }}</p>
-          </article>
 
-          <div v-if="historyLoading" class="empty-state">正在加载流水...</div>
-          <div v-else-if="!itemTransactions.length" class="empty-state">当前物料还没有流水记录。</div>
+            <article v-for="tx in itemTransactions" :key="tx.id" class="console-table-row history-table-grid">
+              <div class="console-cell">
+                <span :class="['console-badge', tx.transaction_type === 'receipt' ? 'ok' : 'warn']">
+                  {{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}
+                </span>
+              </div>
+              <div class="console-cell muted console-nowrap" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
+              <div class="console-cell">
+                <strong>{{ tx.quantity }}</strong>
+              </div>
+              <div class="console-cell muted console-clamp-2" :title="tx.operator_name || '未填'">{{ tx.operator_name || '未填' }}</div>
+              <div class="console-cell muted console-nowrap" :title="tx.reference_code || '未填'">{{ tx.reference_code || '未填' }}</div>
+              <div class="console-cell muted console-clamp-2" :title="tx.notes || '无'">{{ tx.notes || '无' }}</div>
+            </article>
+          </div>
+
+          <div v-if="historyLoading" class="console-empty">正在加载流水...</div>
+          <div v-else-if="!itemTransactions.length" class="console-empty">当前物料还没有流水记录。</div>
         </div>
       </section>
     </div>
