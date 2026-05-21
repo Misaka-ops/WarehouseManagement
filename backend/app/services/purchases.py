@@ -385,8 +385,15 @@ def delete_pending_purchase_items(session: Session, item_ids: list[int]) -> list
             select(PurchaseOrderItem.id).where(PurchaseOrderItem.order_id == order_id)
         ).all()
         if not remaining_items:
-            order = session.get(PurchaseOrder, order_id)
+            order = session.scalar(
+                select(PurchaseOrder)
+                .options(joinedload(PurchaseOrder.feishu_meta))
+                .where(PurchaseOrder.id == order_id)
+            )
             if order:
+                # In test flows, deleting all pending rows from a Feishu-imported order
+                # should also clear its "already imported" marker so the same approval
+                # instance can be previewed and imported again.
                 session.delete(order)
 
     session.commit()
