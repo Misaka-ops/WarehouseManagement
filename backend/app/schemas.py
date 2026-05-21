@@ -128,6 +128,81 @@ class PurchaseImportStateUpdateRequest(BaseModel):
     states: list[PurchaseImportStateUpdate] = Field(min_length=1)
 
 
+class FeishuPurchaseSyncRequest(BaseModel):
+    approval_code: str | None = None
+    instance_codes: list[str] = Field(default_factory=list)
+    page_size: int = Field(default=20, ge=1, le=100)
+    max_pages: int = Field(default=3, ge=1, le=20)
+    locale: str = "zh-CN"
+
+
+class FeishuPurchaseImportRequest(FeishuPurchaseSyncRequest):
+    pass
+
+
+class FeishuApprovalSyncStateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    approval_code: str
+    last_synced_at: datetime | None
+    last_synced_instance_code: str | None
+    last_sync_status: str | None
+    last_sync_message: str | None
+    updated_at: datetime | None = None
+
+
+class FeishuApprovalInstanceRecordRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    instance_code: str
+    approval_code: str
+    status: str | None
+    title: str | None
+    creator_name: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    raw_payload: str
+    updated_at: datetime | None = None
+
+
+class FeishuApprovalDefinitionRead(BaseModel):
+    approval_code: str
+    approval_name: str | None
+    status: str | None
+    raw_payload: str
+
+
+class FeishuInstancePullRequest(BaseModel):
+    instance_code: str
+    approval_code: str | None = None
+    locale: str = "zh-CN"
+
+
+class FeishuPurchaseSyncResponse(BaseModel):
+    approval_code: str
+    fetched_instance_count: int
+    created_instance_count: int
+    updated_instance_count: int
+    skipped_instance_count: int
+    sync_state: FeishuApprovalSyncStateRead
+    instances: list[FeishuApprovalInstanceRecordRead]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class FeishuPurchaseImportResponse(BaseModel):
+    approval_code: str
+    fetched_instance_count: int
+    created_instance_count: int
+    updated_instance_count: int
+    imported_order_count: int
+    imported_item_count: int
+    skipped_instance_count: int
+    skipped_import_count: int
+    sync_state: FeishuApprovalSyncStateRead
+    instances: list[FeishuApprovalInstanceRecordRead]
+    warnings: list[str] = Field(default_factory=list)
+
+
 class PurchaseImportItemRead(BaseModel):
     purchase_item_id: int
     purchase_order_id: int

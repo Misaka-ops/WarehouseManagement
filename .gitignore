@@ -1,6 +1,8 @@
 .venv/
 .venv-linux/
 .python-packages/
+.env
+**/.env
 __pycache__/
 *.pyc
 backend/data/*.db

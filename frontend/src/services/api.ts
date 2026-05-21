@@ -2,6 +2,8 @@ import axios from 'axios'
 
 import type {
   DashboardResponse,
+  FeishuPurchaseSyncRequest,
+  FeishuPurchaseImportResponse,
   InventoryBulkDeleteResponse,
   InventoryImportResponse,
   InventoryTransaction,
@@ -116,6 +118,13 @@ export async function receivePurchaseItem(payload: PurchaseReceivePayload) {
 export async function deletePendingPurchaseItems(itemIds: number[]) {
   const { data } = await api.post<PurchasePendingReceiptDeleteResponse>('/purchases/pending-receipts/bulk-delete', {
     item_ids: itemIds,
+  })
+  return data
+}
+
+export async function importFeishuPurchase(payload: FeishuPurchaseSyncRequest) {
+  const { data } = await api.post<FeishuPurchaseImportResponse>('/purchases/feishu/import', payload, {
+    timeout: 120000,
   })
   return data
 }

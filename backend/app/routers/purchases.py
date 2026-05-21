@@ -1,10 +1,18 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..models import PurchaseOrder
 from ..schemas import (
+    FeishuApprovalDefinitionRead,
+    FeishuApprovalInstanceRecordRead,
+    FeishuApprovalSyncStateRead,
+    FeishuPurchaseImportRequest,
+    FeishuPurchaseImportResponse,
+    FeishuInstancePullRequest,
+    FeishuPurchaseSyncRequest,
+    FeishuPurchaseSyncResponse,
     InventoryTransactionRead,
     PurchaseImportedItemsAdjustRequest,
     PurchaseImportedItemsAdjustResponse,
@@ -18,6 +26,15 @@ from ..schemas import (
     PurchaseReceiveCreate,
 )
 from ..services.inventory import list_pending_purchase_receipts, receive_purchase_item
+from ..services.feishu import (
+    FeishuIntegrationError,
+    get_feishu_approval_definition,
+    import_feishu_purchase_instances,
+    list_feishu_instance_records,
+    list_feishu_sync_states,
+    pull_feishu_instance_by_code,
+    sync_feishu_purchase_instances,
+)
 from ..services.purchases import (
     delete_pending_purchase_items,
     get_or_create_purchase_import_states,
@@ -29,6 +46,12 @@ from ..services.purchases import (
 
 
 router = APIRouter(prefix="/purchases", tags=["purchases"])
+
+
+def _feishu_http_status(detail: str) -> int:
+    if "缺少飞书" in detail or "请先配置" in detail:
+        return 400
+    return 502
 
 
 @router.get("/import-states", response_model=list[PurchaseImportStateRead])
@@ -158,3 +181,55 @@ def delete_pending_receipts(payload: PurchasePendingReceiptDeleteRequest, db: Se
         deleted_count=len(deleted_item_ids),
         deleted_item_ids=deleted_item_ids,
     )
+
+
+@router.post("/feishu/sync", response_model=FeishuPurchaseSyncResponse)
+def sync_feishu_purchase(payload: FeishuPurchaseSyncRequest, db: Session = Depends(get_db)):
+    try:
+        return sync_feishu_purchase_instances(db, payload)
+    except FeishuIntegrationError as exc:
+        raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
+
+
+@router.post("/feishu/import", response_model=FeishuPurchaseImportResponse)
+def import_feishu_purchase(payload: FeishuPurchaseImportRequest, db: Session = Depends(get_db)):
+    try:
+        return import_feishu_purchase_instances(db, payload)
+    except FeishuIntegrationError as exc:
+        raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
+
+
+@router.get("/feishu/instances", response_model=list[FeishuApprovalInstanceRecordRead])
+def get_feishu_instances(
+    approval_code: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return list_feishu_instance_records(db, approval_code=approval_code, limit=limit)
+
+
+@router.post("/feishu/instance", response_model=FeishuApprovalInstanceRecordRead)
+def pull_feishu_instance(payload: FeishuInstancePullRequest, db: Session = Depends(get_db)):
+    try:
+        return pull_feishu_instance_by_code(db, payload)
+    except FeishuIntegrationError as exc:
+        raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
+
+
+@router.get("/feishu/definition", response_model=FeishuApprovalDefinitionRead)
+def get_feishu_definition(
+    approval_code: str | None = None,
+    locale: str = Query(default="zh-CN"),
+):
+    try:
+        return get_feishu_approval_definition(approval_code, locale=locale)
+    except FeishuIntegrationError as exc:
+        raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
+
+
+@router.get("/feishu/sync-state", response_model=list[FeishuApprovalSyncStateRead])
+def get_feishu_sync_states(
+    approval_code: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return list_feishu_sync_states(db, approval_code=approval_code)

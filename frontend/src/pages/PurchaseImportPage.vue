@@ -1,28 +1,39 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
+import { usePendingReceipts } from '../composables/usePendingReceipts'
 import {
   fetchPurchaseImportStates,
   importPurchaseWorkbook,
+  importFeishuPurchase,
   updateImportedPurchaseItems,
   updatePurchaseImportStates,
 } from '../services/api'
-import type { PurchaseImportItem, PurchaseImportResponse, PurchaseImportState } from '../types/inventory'
+import type {
+  FeishuPurchaseImportResponse,
+  PurchaseImportItem,
+  PurchaseImportResponse,
+  PurchaseImportState,
+} from '../types/inventory'
 
 type EditableImportItem = PurchaseImportItem & {
   requested_quantity_input: number | null
 }
 
 const { dashboard, inventoryItems, loadDashboard } = useInventoryWorkspace()
+const { loadPendingReceipts } = usePendingReceipts()
 
 const states = ref<PurchaseImportState[]>([])
 const selectedFile = ref<File | null>(null)
 const importing = ref(false)
+const syncingFeishu = ref(false)
 const savingStates = ref(false)
 const savingAdjustments = ref(false)
 const importResult = ref<PurchaseImportResponse | null>(null)
+const feishuSyncResult = ref<FeishuPurchaseImportResponse | null>(null)
 const resultDialogVisible = ref(false)
 const editableItems = ref<EditableImportItem[]>([])
 
@@ -30,6 +41,31 @@ const rowInputs = reactive<Record<string, number>>({})
 
 const unmatchedCount = computed(() => editableItems.value.filter((item) => item.inventory_item_id == null).length)
 const fileLabel = computed(() => selectedFile.value?.name ?? '尚未选择采购 Excel 文件')
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail
+    }
+    const message = error.response?.data?.message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+    return error.message || fallback
+  }
+
+  return error instanceof Error ? error.message : fallback
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return '未记录'
+  }
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('zh-CN', { hour12: false })
+}
 
 function syncStates(nextStates: PurchaseImportState[]) {
   states.value = nextStates
@@ -102,6 +138,35 @@ async function submitImport() {
     ElMessage.error(message)
   } finally {
     importing.value = false
+  }
+}
+
+async function syncFeishuImport() {
+  syncingFeishu.value = true
+  try {
+    const response = await importFeishuPurchase({})
+    feishuSyncResult.value = response
+    await Promise.all([loadDashboard({ quiet: true }), loadPendingReceipts()])
+
+    if (response.warnings.length) {
+      ElMessage.warning(`飞书同步完成，但有 ${response.warnings.length} 条警告。`)
+      response.warnings.forEach((warning) => ElMessage.warning(warning))
+    } else {
+      ElMessage.success('飞书同步完成。')
+    }
+
+    if (response.imported_order_count > 0) {
+      ElMessage.success(
+        `导入 ${response.imported_order_count} 单 / ${response.imported_item_count} 条明细。`,
+      )
+    } else {
+      ElMessage.success('本次没有新增可导入的飞书采购单。')
+    }
+  } catch (error) {
+    const message = getErrorMessage(error, '飞书采购同步失败')
+    ElMessage.error(message)
+  } finally {
+    syncingFeishu.value = false
   }
 }
 
@@ -216,16 +281,23 @@ onMounted(async () => {
               <strong>匹配规则</strong>
               <p>物料名称和规格型号会精确匹配库存项。</p>
             </article>
+            <article class="note-card warm-note">
+              <strong>飞书同步</strong>
+              <p>使用后端已配置的飞书采购审批编码拉取审批实例，同步后会刷新看板和待收货列表。</p>
+            </article>
           </div>
 
           <div class="link-row">
             <button class="primary-button" :disabled="importing || !selectedFile" type="button" @click="submitImport">
               {{ importing ? '导入中...' : '开始采购增量导入' }}
             </button>
+            <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
+              {{ syncingFeishu ? '同步中...' : '同步飞书采购申请' }}
+            </button>
             <RouterLink class="action-link ghost" to="/purchase-receiving">去看采购收货</RouterLink>
           </div>
         </div>
-      </section>
+    </section>
     </div>
 
     <section v-if="importResult" class="page-section">
@@ -249,6 +321,59 @@ onMounted(async () => {
         <article class="metric-card danger">
           <span>未匹配库存项</span>
           <strong>{{ importResult.unmatched_item_count }}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="feishuSyncResult" class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">飞书同步结果</p>
+          <h3>{{ feishuSyncResult.sync_state.last_sync_status || '同步已完成' }}</h3>
+        </div>
+        <span class="section-meta">审批编码：{{ feishuSyncResult.approval_code }}</span>
+      </div>
+
+      <p class="section-copy">
+        {{ feishuSyncResult.sync_state.last_sync_message || '飞书审批实例已同步到本地。' }}
+      </p>
+
+      <div class="metric-grid compact">
+        <article class="metric-card">
+          <span>抓取实例</span>
+          <strong>{{ feishuSyncResult.fetched_instance_count }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>新增实例</span>
+          <strong>{{ feishuSyncResult.created_instance_count }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>更新实例</span>
+          <strong>{{ feishuSyncResult.updated_instance_count }}</strong>
+        </article>
+        <article class="metric-card accent">
+          <span>跳过实例</span>
+          <strong>{{ feishuSyncResult.skipped_instance_count }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>导入采购单</span>
+          <strong>{{ feishuSyncResult.imported_order_count }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>导入明细</span>
+          <strong>{{ feishuSyncResult.imported_item_count }}</strong>
+        </article>
+      </div>
+
+      <div class="import-notes compact-notes">
+        <article class="note-card">
+          <strong>最近同步</strong>
+          <p>同步时间：{{ formatDateTime(feishuSyncResult.sync_state.last_synced_at) }}</p>
+          <p>最后实例：{{ feishuSyncResult.sync_state.last_synced_instance_code || '未记录' }}</p>
+        </article>
+        <article v-for="(warning, index) in feishuSyncResult.warnings" :key="`${warning}-${index}`" class="note-card warm-note">
+          <strong>警告</strong>
+          <p>{{ warning }}</p>
         </article>
       </div>
     </section>

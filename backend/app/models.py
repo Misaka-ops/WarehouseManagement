@@ -88,6 +88,7 @@ class PurchaseOrder(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     items: Mapped[list[PurchaseOrderItem]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    feishu_meta: Mapped[FeishuPurchaseOrderMeta | None] = relationship(back_populates="purchase_order", cascade="all, delete-orphan")
 
 
 class PurchaseOrderItem(TimestampMixin, Base):
@@ -110,6 +111,7 @@ class PurchaseOrderItem(TimestampMixin, Base):
     order: Mapped[PurchaseOrder] = relationship(back_populates="items")
     inventory_item: Mapped[InventoryItem | None] = relationship(back_populates="purchase_items")
     import_meta: Mapped[PurchaseImportItemMeta | None] = relationship(back_populates="purchase_item", cascade="all, delete-orphan")
+    feishu_meta: Mapped[FeishuPurchaseItemMeta | None] = relationship(back_populates="purchase_item", cascade="all, delete-orphan")
 
 
 class PurchaseImportItemMeta(TimestampMixin, Base):
@@ -130,6 +132,55 @@ class PurchaseImportState(TimestampMixin, Base):
     header_row: Mapped[int] = mapped_column(default=2)
     last_imported_row: Mapped[int] = mapped_column(default=2)
     last_workbook_name: Mapped[str | None] = mapped_column(String(255))
+
+
+class FeishuPurchaseOrderMeta(TimestampMixin, Base):
+    __tablename__ = "feishu_purchase_order_meta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    approval_instance_code: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    approval_code: Mapped[str] = mapped_column(String(120), index=True)
+    purchase_order_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id"), unique=True, index=True)
+    serial_number: Mapped[str | None] = mapped_column(String(120))
+    approval_status: Mapped[str | None] = mapped_column(String(80))
+
+    purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="feishu_meta")
+
+
+class FeishuPurchaseItemMeta(TimestampMixin, Base):
+    __tablename__ = "feishu_purchase_item_meta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    purchase_item_id: Mapped[int] = mapped_column(ForeignKey("purchase_order_items.id"), unique=True, index=True)
+    approval_instance_code: Mapped[str] = mapped_column(String(120), index=True)
+    source_line_no: Mapped[int] = mapped_column()
+
+    purchase_item: Mapped[PurchaseOrderItem] = relationship(back_populates="feishu_meta")
+
+
+class FeishuApprovalSyncState(TimestampMixin, Base):
+    __tablename__ = "feishu_approval_sync_states"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    approval_code: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_synced_instance_code: Mapped[str | None] = mapped_column(String(120))
+    last_sync_status: Mapped[str | None] = mapped_column(String(80))
+    last_sync_message: Mapped[str | None] = mapped_column(Text)
+
+
+class FeishuApprovalInstanceRecord(TimestampMixin, Base):
+    __tablename__ = "feishu_approval_instance_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    instance_code: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    approval_code: Mapped[str] = mapped_column(String(120), index=True)
+    status: Mapped[str | None] = mapped_column(String(80))
+    title: Mapped[str | None] = mapped_column(String(255))
+    creator_name: Mapped[str | None] = mapped_column(String(120))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    raw_payload: Mapped[str] = mapped_column(Text)
 
 
 class InventoryTransaction(TimestampMixin, Base):

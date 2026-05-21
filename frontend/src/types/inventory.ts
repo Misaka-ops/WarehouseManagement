@@ -111,6 +111,52 @@ export interface PurchaseImportResponse {
   warnings: string[]
 }
 
+export interface FeishuPurchaseSyncRequest {
+  approval_code?: string | null
+  instance_codes?: string[]
+  page_size?: number
+  max_pages?: number
+  locale?: string
+}
+
+export interface FeishuApprovalSyncState {
+  approval_code: string
+  last_synced_at: string | null
+  last_synced_instance_code: string | null
+  last_sync_status: string | null
+  last_sync_message: string | null
+  updated_at: string | null
+}
+
+export interface FeishuApprovalInstanceRecord {
+  instance_code: string
+  approval_code: string
+  status: string | null
+  title: string | null
+  creator_name: string | null
+  started_at: string | null
+  finished_at: string | null
+  raw_payload: string
+  updated_at: string | null
+}
+
+export interface FeishuPurchaseSyncResponse {
+  approval_code: string
+  fetched_instance_count: number
+  created_instance_count: number
+  updated_instance_count: number
+  skipped_instance_count: number
+  sync_state: FeishuApprovalSyncState
+  instances: FeishuApprovalInstanceRecord[]
+  warnings: string[]
+}
+
+export interface FeishuPurchaseImportResponse extends FeishuPurchaseSyncResponse {
+  imported_order_count: number
+  imported_item_count: number
+  skipped_import_count: number
+}
+
 export interface PurchaseReceivePayload {
   purchase_item_id: number
   quantity: number
