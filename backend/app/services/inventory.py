@@ -102,17 +102,49 @@ def list_item_transactions(session: Session, item_id: int, limit: int = 12) -> l
     ).all()
 
 
+def _refresh_purchase_order_status(order: PurchaseOrder) -> None:
+    order_items = order.items
+    if not order_items:
+        order.status = PurchaseOrderStatus.pending
+        return
+
+    if all((line.requested_quantity or Decimal("0")) <= (line.received_quantity or Decimal("0")) for line in order_items):
+        order.status = PurchaseOrderStatus.completed
+    elif any((line.received_quantity or Decimal("0")) > 0 for line in order_items):
+        order.status = PurchaseOrderStatus.partial
+    else:
+        order.status = PurchaseOrderStatus.pending
+
+
 def delete_inventory_items(session: Session, item_ids: list[int]) -> list[int]:
     normalized_ids = sorted(set(item_ids))
     if not normalized_ids:
         raise ValueError("No inventory items selected for deletion.")
 
-    existing_ids = session.scalars(
-        select(InventoryItem.id).where(InventoryItem.id.in_(normalized_ids))
-    ).all()
-    existing_ids = sorted(set(existing_ids))
-    if not existing_ids:
+    items = session.scalars(
+        select(InventoryItem)
+        .options(joinedload(InventoryItem.purchase_items).joinedload(PurchaseOrderItem.order).joinedload(PurchaseOrder.items))
+        .where(InventoryItem.id.in_(normalized_ids))
+    ).unique().all()
+    existing_ids = sorted({item.id for item in items})
+    if not items:
         raise ValueError("Selected inventory items were not found.")
+
+    touched_order_ids: set[int] = set()
+    for item in items:
+        for purchase_item in item.purchase_items:
+            purchase_item.inventory_item_id = None
+            purchase_item.received_quantity = Decimal("0")
+            touched_order_ids.add(purchase_item.order_id)
+
+    if touched_order_ids:
+        touched_orders = session.scalars(
+            select(PurchaseOrder)
+            .options(joinedload(PurchaseOrder.items))
+            .where(PurchaseOrder.id.in_(touched_order_ids))
+        ).unique().all()
+        for order in touched_orders:
+            _refresh_purchase_order_status(order)
 
     session.execute(
         update(PurchaseOrderItem)
@@ -213,11 +245,7 @@ def receive_purchase_item(
     purchase_item.received_quantity = Decimal(received_quantity) + quantity
 
     order = purchase_item.order
-    order_items = order.items
-    if all((line.requested_quantity or Decimal("0")) <= (line.received_quantity or Decimal("0")) for line in order_items):
-      order.status = PurchaseOrderStatus.completed
-    elif any((line.received_quantity or Decimal("0")) > 0 for line in order_items):
-      order.status = PurchaseOrderStatus.partial
+    _refresh_purchase_order_status(order)
 
     transaction = InventoryTransaction(
         item_id=inventory_item.id,

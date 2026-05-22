@@ -545,7 +545,9 @@ onMounted(async () => {
           <input :checked="allImportableFeishuSelected" type="checkbox" @change="toggleSelectAllFeishuOrders" />
           <span>全选当前可导入采购单</span>
         </label>
-        <span class="section-meta">已导入或未解析成功的实例会保留展示，但不可重复加入。</span>
+        <span v-if="feishuPreviewOrders.some((order) => !order.can_import)" class="section-meta">
+          不可导入的实例会保留展示，并显示原因。
+        </span>
       </div>
 
       <div class="stack-list feishu-preview-list">

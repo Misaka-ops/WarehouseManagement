@@ -65,7 +65,7 @@ async function handleBulkDelete() {
 
   try {
     await ElMessageBox.confirm(
-      `将删除 ${selectedDeleteIds.value.length} 个库存项目，并一并清除对应库存流水。此操作仅建议在开发阶段使用。`,
+      `将删除 ${selectedDeleteIds.value.length} 个库存项目，并一并清除对应库存流水、采购收货关联和已收货数量回滚。此操作仅建议在开发阶段使用。`,
       '确认删除库存',
       {
         confirmButtonText: '确认删除',
