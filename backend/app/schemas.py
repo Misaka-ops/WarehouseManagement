@@ -219,6 +219,7 @@ class FeishuPurchasePreviewItemRead(BaseModel):
     material_name: str
     specification: str | None
     requested_quantity: Decimal | None
+    unit: str | None
     total_amount: Decimal | None
     link: str | None
     inventory_item_id: int | None

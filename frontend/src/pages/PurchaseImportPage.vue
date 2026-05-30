@@ -594,7 +594,7 @@ onMounted(async () => {
                   <span>{{ item.specification || '未填规格' }}</span>
                 </div>
                 <div class="preview-item-meta">
-                  <span>数量：{{ item.requested_quantity || '--' }}</span>
+                  <span>数量：{{ item.requested_quantity || '--' }} {{ item.unit || '件' }}</span>
                   <span>金额：{{ item.total_amount || '--' }}</span>
                   <span>{{ item.inventory_item_id ? '已匹配库存项' : '未匹配库存项' }}</span>
                 </div>

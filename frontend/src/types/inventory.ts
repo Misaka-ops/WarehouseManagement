@@ -171,6 +171,7 @@ export interface FeishuPurchasePreviewItem {
   material_name: string
   specification: string | null
   requested_quantity: string | null
+  unit: string | null
   total_amount: string | null
   link: string | null
   inventory_item_id: number | null

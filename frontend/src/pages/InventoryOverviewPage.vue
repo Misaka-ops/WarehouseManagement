@@ -172,7 +172,8 @@ onMounted(async () => {
             <colgroup>
               <col style="width: 56px" />
               <col style="width: 240px" />
-              <col style="width: 220px" />
+              <col style="width: 180px" />
+              <col style="width: 90px" />
               <col style="width: 110px" />
               <col style="width: 130px" />
               <col style="width: 130px" />
@@ -185,6 +186,7 @@ onMounted(async () => {
                 <th class="console-data-head center">选中</th>
                 <th>物料</th>
                 <th>规格</th>
+                <th>单位</th>
                 <th>区位</th>
                 <th>采购人</th>
                 <th>库存</th>
@@ -218,6 +220,9 @@ onMounted(async () => {
                 </td>
                 <td class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
                 </td>
                 <td class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
@@ -289,7 +294,7 @@ onMounted(async () => {
             </div>
             <div class="console-cell muted console-nowrap" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
             <div class="console-cell">
-              <strong>{{ tx.quantity }}</strong>
+              <strong>{{ tx.quantity }} {{ selectedItem?.unit || '件' }}</strong>
             </div>
             <div class="console-cell muted console-clamp-2" :title="tx.operator_name || '未填'">{{ tx.operator_name || '未填' }}</div>
             <div class="console-cell muted console-nowrap" :title="tx.reference_code || '未填'">{{ tx.reference_code || '未填' }}</div>

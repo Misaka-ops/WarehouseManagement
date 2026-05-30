@@ -116,6 +116,16 @@ def _refresh_purchase_order_status(order: PurchaseOrder) -> None:
         order.status = PurchaseOrderStatus.pending
 
 
+def _should_purge_feishu_purchase_order_after_inventory_reset(order: PurchaseOrder) -> bool:
+    if order.feishu_meta is None:
+        return False
+
+    return all(
+        (line.received_quantity or Decimal("0")) <= Decimal("0") and line.inventory_item_id is None
+        for line in order.items
+    )
+
+
 def delete_inventory_items(session: Session, item_ids: list[int]) -> list[int]:
     normalized_ids = sorted(set(item_ids))
     if not normalized_ids:
@@ -123,7 +133,12 @@ def delete_inventory_items(session: Session, item_ids: list[int]) -> list[int]:
 
     items = session.scalars(
         select(InventoryItem)
-        .options(joinedload(InventoryItem.purchase_items).joinedload(PurchaseOrderItem.order).joinedload(PurchaseOrder.items))
+        .options(
+            joinedload(InventoryItem.purchase_items)
+            .joinedload(PurchaseOrderItem.order)
+            .joinedload(PurchaseOrder.items),
+            joinedload(InventoryItem.purchase_items).joinedload(PurchaseOrderItem.order).joinedload(PurchaseOrder.feishu_meta),
+        )
         .where(InventoryItem.id.in_(normalized_ids))
     ).unique().all()
     existing_ids = sorted({item.id for item in items})
@@ -140,10 +155,13 @@ def delete_inventory_items(session: Session, item_ids: list[int]) -> list[int]:
     if touched_order_ids:
         touched_orders = session.scalars(
             select(PurchaseOrder)
-            .options(joinedload(PurchaseOrder.items))
+            .options(joinedload(PurchaseOrder.items), joinedload(PurchaseOrder.feishu_meta))
             .where(PurchaseOrder.id.in_(touched_order_ids))
         ).unique().all()
         for order in touched_orders:
+            if _should_purge_feishu_purchase_order_after_inventory_reset(order):
+                session.delete(order)
+                continue
             _refresh_purchase_order_status(order)
 
     session.execute(

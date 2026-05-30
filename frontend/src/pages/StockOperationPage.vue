@@ -184,6 +184,7 @@ onMounted(async () => {
           <div class="console-table-header inventory-pick-table-grid">
             <span class="console-header-cell">物料</span>
             <span class="console-header-cell">规格</span>
+            <span class="console-header-cell">单位</span>
             <span class="console-header-cell">供应商</span>
             <span class="console-header-cell">区位</span>
             <span class="console-header-cell">项目</span>
@@ -204,6 +205,7 @@ onMounted(async () => {
               <span class="console-subtext">#{{ item.id }}</span>
             </div>
             <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+            <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填'">{{ item.project_name || '未填' }}</div>
@@ -235,6 +237,13 @@ onMounted(async () => {
         </div>
 
         <form class="form-stack" @submit.prevent="submitTransaction">
+          <div class="receipt-summary">
+            <p>物料：{{ selectedItem?.material_name || '未选择' }}</p>
+            <p>规格：{{ selectedItem?.specification || '未填规格' }}</p>
+            <p>单位：{{ selectedItem?.unit || '件' }}</p>
+            <p>当前库存：{{ selectedItem?.quantity_on_hand || '--' }} {{ selectedItem?.unit || '件' }}</p>
+          </div>
+
           <label class="field">
             <span>数量</span>
             <div class="quantity-editor">
@@ -323,7 +332,7 @@ onMounted(async () => {
               </div>
               <div class="console-cell muted console-nowrap" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
               <div class="console-cell">
-                <strong>{{ tx.quantity }}</strong>
+                <strong>{{ tx.quantity }} {{ selectedItem?.unit || '件' }}</strong>
               </div>
               <div class="console-cell muted console-clamp-2" :title="tx.operator_name || '未填'">{{ tx.operator_name || '未填' }}</div>
               <div class="console-cell muted console-nowrap" :title="tx.reference_code || '未填'">{{ tx.reference_code || '未填' }}</div>

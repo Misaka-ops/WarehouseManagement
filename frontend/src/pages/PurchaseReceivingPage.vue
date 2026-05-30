@@ -261,6 +261,7 @@ onMounted(async () => {
                 <span>供应商：{{ item.supplier_name || '未填供应商' }}</span>
                 <span>请购人：{{ item.requester || '未填' }}</span>
                 <span>规格：{{ item.specification || '未填规格' }}</span>
+                <span>单位：{{ item.unit || '件' }}</span>
                 <span>来源：{{ item.sheet_name }}</span>
                 <span>到货：{{ item.expected_arrival || '未记录' }}</span>
               </div>
@@ -286,12 +287,14 @@ onMounted(async () => {
           <template v-if="isBatchReceiveMode">
             <p>已勾选明细：{{ selectedPendingReceipts.length }} 条</p>
             <p>待收数量：将按每条明细当前待收数量分别入库</p>
+            <p>单位：按各明细原单位入库</p>
             <p>区位：{{ receiptForm.location_name || '本次未统一填写' }}</p>
             <p>说明：将按每条明细当前待收数量分别入库。</p>
           </template>
           <template v-else>
             <p>供应商：{{ selectedPendingReceipt?.supplier_name || '未填' }}</p>
             <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
+            <p>单位：{{ selectedPendingReceipt?.unit || '件' }}</p>
             <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
             <p>待收数量：{{ selectedPendingReceipt?.pending_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
           </template>

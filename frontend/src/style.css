@@ -1194,7 +1194,7 @@ textarea {
 }
 
 .inventory-pick-table-grid {
-  --table-columns: minmax(180px, 1.7fr) minmax(150px, 1.1fr) minmax(140px, 1fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(150px, 0.9fr) 120px;
+  --table-columns: minmax(180px, 1.6fr) minmax(140px, 1fr) minmax(84px, 0.6fr) minmax(140px, 1fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(150px, 0.9fr) 120px;
 }
 
 .purchase-table-grid {

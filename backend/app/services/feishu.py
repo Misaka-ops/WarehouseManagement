@@ -488,6 +488,7 @@ class ParsedFeishuPurchaseItem:
     material_name: str
     specification: str | None
     requested_quantity: Decimal | None
+    unit: str | None
     total_amount: Decimal | None
     link: str | None
 
@@ -602,6 +603,7 @@ def _parse_item_rows(widgets: list[dict[str, Any]]) -> list[ParsedFeishuPurchase
                 material_name=material_name,
                 specification=normalize_text(_widget_display_value(_find_widget(row_widgets, "规格") or {})),
                 requested_quantity=_coerce_decimal(_widget_display_value(_find_widget(row_widgets, "数量") or {})),
+                unit=normalize_text(_widget_display_value(_find_widget(row_widgets, "单位") or {})),
                 total_amount=_coerce_decimal(_widget_display_value(_find_widget(row_widgets, "金额") or {})),
                 link=normalize_text(_widget_display_value(_find_widget(row_widgets, "链接（如需）") or {})),
             )
@@ -786,9 +788,13 @@ def sync_feishu_purchase_instances(
     if not approval_code:
         raise FeishuIntegrationError("请先配置飞书采购审批编码，或在请求体中传入 approval_code。")
 
+    warnings: list[str] = []
+    purged_detached_count = _purge_detached_received_feishu_orders(session, approval_code=approval_code)
+    if purged_detached_count:
+        warnings.append(f"已自动清理 {purged_detached_count} 条脱离库存关联的历史飞书采购记录。")
+
     client = FeishuClient()
     client.tenant_access_token
-    warnings: list[str] = []
     instance_codes: list[str] = []
     start_time, end_time = _resolve_time_window(payload.time_range_days)
 
@@ -925,6 +931,37 @@ def _build_purchase_order_notes(parsed: ParsedFeishuPurchaseOrder, approval_code
     return "；".join(source_bits) if source_bits else None
 
 
+def _is_detached_received_feishu_order(order: PurchaseOrder | None) -> bool:
+    if order is None or order.feishu_meta is None or not order.items:
+        return False
+
+    has_received_rows = any((item.received_quantity or Decimal("0")) > Decimal("0") for item in order.items)
+    has_inventory_links = any(item.inventory_item_id is not None for item in order.items)
+    return has_received_rows and not has_inventory_links
+
+
+def _purge_detached_received_feishu_orders(
+    session: Session,
+    *,
+    approval_code: str | None = None,
+) -> int:
+    statement = select(FeishuPurchaseOrderMeta)
+    if approval_code:
+        statement = statement.where(FeishuPurchaseOrderMeta.approval_code == approval_code)
+
+    purged_count = 0
+    for meta in session.scalars(statement).all():
+        order = meta.purchase_order
+        if not _is_detached_received_feishu_order(order):
+            continue
+        session.delete(order)
+        purged_count += 1
+
+    if purged_count:
+        session.flush()
+    return purged_count
+
+
 def _purge_feishu_purchase_order(session: Session, instance_code: str) -> bool:
     existing_meta = session.scalar(
         select(FeishuPurchaseOrderMeta).where(FeishuPurchaseOrderMeta.approval_instance_code == instance_code)
@@ -1003,7 +1040,7 @@ def _import_feishu_purchase_instance(
             specification=row.specification,
             requested_quantity=row.requested_quantity,
             received_quantity=Decimal("0"),
-            unit=None,
+            unit=row.unit,
             unit_price=None,
             tax_rate=None,
             total_amount=row.total_amount,
@@ -1076,6 +1113,7 @@ def _build_feishu_purchase_preview_order(
                 material_name=row.material_name,
                 specification=row.specification,
                 requested_quantity=row.requested_quantity,
+                unit=row.unit,
                 total_amount=row.total_amount,
                 link=row.link,
                 inventory_item_id=inventory_match_cache[cache_key],
