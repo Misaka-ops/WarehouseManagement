@@ -184,7 +184,13 @@ onMounted(async () => {
         <div class="selection-status">
           <span>当前作业对象</span>
           <strong>{{ selectedItem?.material_name || '先从下方台账选择物料' }}</strong>
-          <small>{{ selectedItem ? `库存 ${selectedItem.quantity_on_hand} ${selectedItem.unit || '件'} / 区位 ${selectedItem.location_name || '未填'}` : '选中后可直接发起入库或出库' }}</small>
+          <small>
+            {{
+              selectedItem
+                ? `库存 ${selectedItem.quantity_on_hand} ${selectedItem.unit || '件'} / 供应商 ${selectedItem.supplier_name || '未填'} / 区位 ${selectedItem.location_name || '未填'}`
+                : '选中后可直接发起入库或出库'
+            }}
+          </small>
         </div>
 
         <div class="selection-actions">
@@ -239,8 +245,8 @@ onMounted(async () => {
                 <th>物料</th>
                 <th>规格</th>
                 <th>单位</th>
+                <th>供应商</th>
                 <th>区位</th>
-                <th>采购人</th>
                 <th>库存</th>
                 <th>金额</th>
                 <th>最近入库</th>
@@ -276,10 +282,10 @@ onMounted(async () => {
                   <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                  <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
                 </td>
                 <td class="console-data-cell">
                   <div class="console-cell">
@@ -337,8 +343,8 @@ onMounted(async () => {
               </div>
               <div class="data-row-meta">
                 <span>规格：{{ item.specification || '未填' }}</span>
+                <span>供应商：{{ item.supplier_name || '未填' }}</span>
                 <span>区位：{{ item.location_name || '未填' }}</span>
-                <span>采购人：{{ item.requester || '未填' }}</span>
                 <span>金额：{{ formatCurrency(item.total_amount) }}</span>
                 <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
                 <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>

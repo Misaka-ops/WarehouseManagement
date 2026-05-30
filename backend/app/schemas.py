@@ -107,6 +107,7 @@ class PurchaseReceiveCreate(BaseModel):
     quantity: Decimal = Field(gt=0)
     occurred_on: date
     total_amount: Decimal | None = Field(default=None, ge=0)
+    supplier_name: str | None = None
     location_name: str | None = None
     operator_name: str | None = None
     reference_code: str | None = None

@@ -32,6 +32,7 @@ const receiptForm = ref<PurchaseReceivePayload>({
   quantity: 1,
   occurred_on: new Date().toISOString().slice(0, 10),
   total_amount: null,
+  supplier_name: '',
   location_name: '',
   operator_name: '',
   reference_code: 'RK-PO-',
@@ -134,6 +135,7 @@ function syncReceiptForm(item: PurchasePendingReceipt) {
   receiptForm.value.purchase_item_id = item.purchase_item_id
   receiptForm.value.quantity = Number(item.pending_quantity)
   receiptForm.value.total_amount = item.total_amount == null ? null : Number(item.total_amount)
+  receiptForm.value.supplier_name = item.supplier_name ?? ''
   receiptForm.value.location_name = item.location_name ?? ''
   receiptForm.value.notes = `${item.material_name} 收货`
 }
@@ -143,6 +145,7 @@ function clearSingleSelection() {
   receiptForm.value.purchase_item_id = 0
   receiptForm.value.quantity = 1
   receiptForm.value.total_amount = null
+  receiptForm.value.supplier_name = ''
   receiptForm.value.location_name = ''
   receiptForm.value.notes = ''
 }
@@ -283,6 +286,7 @@ async function submitBatchReceipt() {
           purchase_item_id: item.purchase_item_id,
           quantity: Number(item.pending_quantity),
           occurred_on: receiptForm.value.occurred_on,
+          supplier_name: receiptForm.value.supplier_name?.trim() || item.supplier_name?.trim() || undefined,
           location_name: receiptForm.value.location_name?.trim() || undefined,
           operator_name: receiptForm.value.operator_name?.trim() || undefined,
           reference_code: receiptForm.value.reference_code?.trim() || undefined,
@@ -344,6 +348,7 @@ async function submitSingleReceipt() {
     await receivePurchaseItem({
       ...receiptForm.value,
       total_amount: receiptForm.value.total_amount == null ? null : Number(receiptForm.value.total_amount),
+      supplier_name: receiptForm.value.supplier_name?.trim() || undefined,
       location_name: receiptForm.value.location_name?.trim() || undefined,
       operator_name: receiptForm.value.operator_name?.trim() || undefined,
       reference_code: receiptForm.value.reference_code?.trim() || undefined,
@@ -569,12 +574,13 @@ onMounted(async () => {
             <p>待收总量：{{ batchSummary.totalQuantity }}</p>
             <p>本次规则：每条明细按当前待收数量一次性收货</p>
             <p>涉及供应商：{{ batchSummary.supplierSummary }}<template v-if="batchSummary.supplierCount > 2"> 等 {{ batchSummary.supplierCount }} 个</template></p>
+            <p>统一供应商：{{ receiptForm.supplier_name || '本次未统一填写，将沿用各明细原供应商' }}</p>
             <p>统一区位：{{ receiptForm.location_name || '本次未统一填写，将沿用原区位' }}</p>
             <p>示例明细：{{ batchSummary.previewItems.join('；') || '先从左侧勾选待收货明细' }}<template v-if="batchSummary.remainingPreviewCount">；其余 {{ batchSummary.remainingPreviewCount }} 条</template></p>
             <p>说明：点击确认后会先弹出最终影响范围确认，再开始批量入库。</p>
           </template>
           <template v-else>
-            <p>供应商：{{ selectedPendingReceipt?.supplier_name || '未填' }}</p>
+            <p>供应商：{{ receiptForm.supplier_name || selectedPendingReceipt?.supplier_name || '未填' }}</p>
             <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
             <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
             <p>本次金额：{{ formatCurrency(receiptForm.total_amount) }}</p>
@@ -612,10 +618,24 @@ onMounted(async () => {
 
           <div class="toolbar-grid dual">
             <label class="field">
+              <span>{{ receiveMode === 'batch' ? '统一供应商' : '供应商' }}</span>
+              <input
+                v-model="receiptForm.supplier_name"
+                type="text"
+                :placeholder="receiveMode === 'batch' ? '留空则沿用各明细原供应商' : '例如 深圳某某电子'"
+              />
+              <small class="field-hint">
+                {{ receiveMode === 'batch' ? '可统一覆盖本次勾选明细的供应商。' : '默认带入采购明细供应商，可按实际到货修改。' }}
+              </small>
+            </label>
+
+            <label class="field">
               <span>{{ receiveMode === 'batch' ? '统一区位' : '区位' }}</span>
               <input v-model="receiptForm.location_name" type="text" placeholder="例如 A-01-03" />
             </label>
+          </div>
 
+          <div class="toolbar-grid dual">
             <label class="field">
               <span>操作人</span>
               <input v-model="receiptForm.operator_name" type="text" placeholder="仓管员" />

@@ -441,6 +441,7 @@ def receive_purchase_item(
     quantity: Decimal,
     occurred_on: date,
     total_amount: Decimal | None,
+    supplier_name: str | None,
     location_name: str | None,
     operator_name: str | None,
     reference_code: str | None,
@@ -458,9 +459,14 @@ def receive_purchase_item(
     if quantity > pending_quantity:
         raise ValueError("Receipt quantity exceeds the pending quantity.")
 
-    location = get_or_create_location(session, normalize_text(location_name))
+    normalized_supplier_name = normalize_text(supplier_name)
+    normalized_location_name = normalize_text(location_name)
+    supplier = get_or_create_supplier(session, normalized_supplier_name)
+    location = get_or_create_location(session, normalized_location_name)
     inventory_item = purchase_item.inventory_item
     receipt_amount = Decimal(total_amount) if total_amount is not None else _infer_purchase_item_amount(purchase_item, quantity)
+    if normalized_supplier_name is not None:
+        purchase_item.order.supplier_name = normalized_supplier_name
     if not inventory_item:
         inventory_item = InventoryItem(
             requester=purchase_item.order.requester,
@@ -469,6 +475,7 @@ def receive_purchase_item(
             material_name=purchase_item.material_name,
             specification=purchase_item.specification,
             unit=purchase_item.unit,
+            supplier=supplier,
             location=location,
             quantity_on_hand=Decimal("0"),
             total_amount=_quantize_amount(receipt_amount) if receipt_amount is not None else None,
@@ -478,6 +485,8 @@ def receive_purchase_item(
         session.flush()
         purchase_item.inventory_item_id = inventory_item.id
     else:
+        if normalized_supplier_name is not None:
+            inventory_item.supplier = supplier
         if location is not None:
             inventory_item.location = location
         if receipt_amount is not None:

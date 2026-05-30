@@ -243,6 +243,7 @@ export interface PurchaseReceivePayload {
   quantity: number
   occurred_on: string
   total_amount?: number | null
+  supplier_name?: string
   location_name?: string
   operator_name?: string
   reference_code?: string
