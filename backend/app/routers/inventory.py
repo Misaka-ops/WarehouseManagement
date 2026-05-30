@@ -11,11 +11,14 @@ from ..schemas import (
     InventoryBulkDeleteResponse,
     InventoryDashboardResponse,
     InventoryImportResponse,
+    InventoryItemRead,
+    InventoryManualUpsertRequest,
+    InventoryManualUpsertResponse,
     InventoryTransactionCreate,
     InventoryTransactionRead,
 )
 from ..services.bootstrap import export_warehouse_workbook, replace_inventory_from_warehouse_workbook
-from ..services.inventory import build_dashboard, create_transaction, delete_inventory_items, list_item_transactions
+from ..services.inventory import build_dashboard, create_transaction, delete_inventory_items, list_item_transactions, upsert_inventory_item
 
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -100,6 +103,29 @@ def post_issue(payload: InventoryTransactionCreate, db: Session = Depends(get_db
         operator_name=transaction.operator_name,
         reference_code=transaction.reference_code,
         notes=transaction.notes,
+    )
+
+
+@router.post("/manual-upsert", response_model=InventoryManualUpsertResponse)
+def post_manual_upsert(payload: InventoryManualUpsertRequest, db: Session = Depends(get_db)):
+    try:
+        item, transaction, created_item = upsert_inventory_item(db, **payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return InventoryManualUpsertResponse(
+        created_item=created_item,
+        item=InventoryItemRead.model_validate(item),
+        transaction=InventoryTransactionRead(
+            id=transaction.id,
+            item_id=transaction.item_id,
+            transaction_type=transaction.transaction_type.value,
+            quantity=transaction.quantity,
+            occurred_on=transaction.occurred_on,
+            operator_name=transaction.operator_name,
+            reference_code=transaction.reference_code,
+            notes=transaction.notes,
+        ),
     )
 
 

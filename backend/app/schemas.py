@@ -75,6 +75,28 @@ class InventoryTransactionRead(BaseModel):
     notes: str | None
 
 
+class InventoryManualUpsertRequest(BaseModel):
+    requester: str | None = None
+    purchase_category: str | None = None
+    project_name: str | None = None
+    material_name: str
+    specification: str | None = None
+    unit: str | None = None
+    supplier_name: str | None = None
+    location_name: str | None = None
+    quantity: Decimal = Field(gt=0)
+    occurred_on: date
+    operator_name: str | None = None
+    reference_code: str | None = None
+    notes: str | None = None
+
+
+class InventoryManualUpsertResponse(BaseModel):
+    created_item: bool
+    item: InventoryItemRead
+    transaction: InventoryTransactionRead
+
+
 class PurchaseReceiveCreate(BaseModel):
     purchase_item_id: int
     quantity: Decimal = Field(gt=0)

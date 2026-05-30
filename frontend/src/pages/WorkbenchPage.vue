@@ -30,6 +30,13 @@ const moduleCards = [
     action: '下载 Excel',
   },
   {
+    to: '/inventory-manual',
+    kicker: '维护',
+    title: '手动录入库存',
+    description: '直接补录散件或临时库存，支持新建与按相同物料累加。',
+    action: '开始录入',
+  },
+  {
     to: '/purchase-import',
     kicker: '采购',
     title: '采购导入',

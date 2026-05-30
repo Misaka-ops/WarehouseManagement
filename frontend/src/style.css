@@ -1274,6 +1274,20 @@ textarea {
   margin-top: 18px;
 }
 
+.manual-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-form {
+  gap: 14px;
+}
+
+.manual-status {
+  margin-top: 14px;
+}
+
 .quantity-editor {
   display: grid;
   grid-template-columns: 68px minmax(0, 1fr) 68px;
@@ -1683,6 +1697,10 @@ textarea {
   .stat-grid,
   .toolbar-grid,
   .toolbar-grid.dual {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-form-grid {
     grid-template-columns: 1fr;
   }
 

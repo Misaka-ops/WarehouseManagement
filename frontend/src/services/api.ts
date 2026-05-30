@@ -7,6 +7,8 @@ import type {
   FeishuPurchaseImportResponse,
   InventoryBulkDeleteResponse,
   InventoryImportResponse,
+  InventoryManualUpsertPayload,
+  InventoryManualUpsertResponse,
   InventoryTransaction,
   InventoryTransactionPayload,
   PurchaseImportItem,
@@ -36,6 +38,11 @@ export async function postReceipt(payload: InventoryTransactionPayload) {
 
 export async function postIssue(payload: InventoryTransactionPayload) {
   const { data } = await api.post('/inventory/issue', payload)
+  return data
+}
+
+export async function upsertInventoryItem(payload: InventoryManualUpsertPayload) {
+  const { data } = await api.post<InventoryManualUpsertResponse>('/inventory/manual-upsert', payload)
   return data
 }
 

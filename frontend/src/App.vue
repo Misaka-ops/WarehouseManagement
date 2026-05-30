@@ -33,6 +33,10 @@ const navGroups: NavGroup[] = [
       { to: '/inventory-export', label: '库存导出' },
     ],
   },
+  {
+    title: '维护',
+    items: [{ to: '/inventory-manual', label: '手动录入' }],
+  },
 ]
 
 const pageEyebrow = computed(() => String(route.meta.eyebrow ?? 'Midnight Control'))

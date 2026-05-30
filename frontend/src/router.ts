@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import InventoryOverviewPage from './pages/InventoryOverviewPage.vue'
 import InventoryImportPage from './pages/InventoryImportPage.vue'
 import InventoryExportPage from './pages/InventoryExportPage.vue'
+import ManualInventoryPage from './pages/ManualInventoryPage.vue'
 import PurchaseImportPage from './pages/PurchaseImportPage.vue'
 import PurchaseReceivingPage from './pages/PurchaseReceivingPage.vue'
 import StockOperationPage from './pages/StockOperationPage.vue'
@@ -45,6 +46,15 @@ const router = createRouter({
         eyebrow: 'Export',
         title: '库存导出',
         description: '导出当前库存 Excel。',
+      },
+    },
+    {
+      path: '/inventory-manual',
+      component: ManualInventoryPage,
+      meta: {
+        eyebrow: 'Maintenance',
+        title: '手动录入库存',
+        description: '直接新建或补录散件库存，并自动写入库存流水。',
       },
     },
     {

@@ -59,6 +59,28 @@ export interface InventoryTransaction {
   notes: string | null
 }
 
+export interface InventoryManualUpsertPayload {
+  requester?: string | null
+  purchase_category?: string | null
+  project_name?: string | null
+  material_name: string
+  specification?: string | null
+  unit?: string | null
+  supplier_name?: string | null
+  location_name?: string | null
+  quantity: number
+  occurred_on: string
+  operator_name?: string | null
+  reference_code?: string | null
+  notes?: string | null
+}
+
+export interface InventoryManualUpsertResponse {
+  created_item: boolean
+  item: InventoryItem
+  transaction: InventoryTransaction
+}
+
 export interface PurchasePendingReceipt {
   purchase_item_id: number
   purchase_order_id: number

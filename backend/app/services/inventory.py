@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from ..models import InventoryItem, InventoryTransaction, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, TransactionType
 from ..schemas import InventoryDashboardResponse, InventoryItemRead, InventorySummary, PurchaseReceiveCandidate
-from .bootstrap import get_or_create_location, normalize_text
+from .bootstrap import get_or_create_location, get_or_create_supplier, normalize_text
 
 
 def build_dashboard(session: Session) -> InventoryDashboardResponse:
@@ -53,6 +53,31 @@ def build_dashboard(session: Session) -> InventoryDashboardResponse:
     )
 
 
+def _find_inventory_item(
+    session: Session,
+    *,
+    material_name: str,
+    specification: str | None,
+    supplier_id: int | None,
+    location_id: int | None,
+) -> InventoryItem | None:
+    conditions = [
+        InventoryItem.material_name == material_name,
+        InventoryItem.specification == specification,
+    ]
+    if supplier_id is None:
+        conditions.append(InventoryItem.supplier_id.is_(None))
+    else:
+        conditions.append(InventoryItem.supplier_id == supplier_id)
+
+    if location_id is None:
+        conditions.append(InventoryItem.location_id.is_(None))
+    else:
+        conditions.append(InventoryItem.location_id == location_id)
+
+    return session.scalar(select(InventoryItem).where(and_(*conditions)).order_by(InventoryItem.id.asc()))
+
+
 def create_transaction(
     session: Session,
     *,
@@ -91,6 +116,95 @@ def create_transaction(
     session.commit()
     session.refresh(transaction)
     return transaction
+
+
+def upsert_inventory_item(
+    session: Session,
+    *,
+    requester: str | None,
+    purchase_category: str | None,
+    project_name: str | None,
+    material_name: str,
+    specification: str | None,
+    unit: str | None,
+    supplier_name: str | None,
+    location_name: str | None,
+    quantity: Decimal,
+    occurred_on: date,
+    operator_name: str | None,
+    reference_code: str | None,
+    notes: str | None,
+) -> tuple[InventoryItem, InventoryTransaction, bool]:
+    normalized_material_name = normalize_text(material_name)
+    if not normalized_material_name:
+        raise ValueError("Material name is required.")
+
+    normalized_specification = normalize_text(specification)
+    normalized_unit = normalize_text(unit)
+    normalized_requester = normalize_text(requester)
+    normalized_purchase_category = normalize_text(purchase_category)
+    normalized_project_name = normalize_text(project_name)
+    normalized_supplier_name = normalize_text(supplier_name)
+    normalized_location_name = normalize_text(location_name)
+    normalized_notes = normalize_text(notes)
+    normalized_operator_name = normalize_text(operator_name)
+    normalized_reference_code = normalize_text(reference_code)
+
+    supplier = get_or_create_supplier(session, normalized_supplier_name)
+    location = get_or_create_location(session, normalized_location_name)
+
+    item = _find_inventory_item(
+        session,
+        material_name=normalized_material_name,
+        specification=normalized_specification,
+        supplier_id=supplier.id if supplier else None,
+        location_id=location.id if location else None,
+    )
+
+    created_item = item is None
+    if created_item:
+        item = InventoryItem(
+            requester=normalized_requester,
+            purchase_category=normalized_purchase_category,
+            project_name=normalized_project_name,
+            material_name=normalized_material_name,
+            specification=normalized_specification,
+            unit=normalized_unit,
+            supplier=supplier,
+            location=location,
+            quantity_on_hand=Decimal("0"),
+            notes=normalized_notes,
+        )
+        session.add(item)
+        session.flush()
+    else:
+        item.requester = normalized_requester
+        item.purchase_category = normalized_purchase_category
+        item.project_name = normalized_project_name
+        item.material_name = normalized_material_name
+        item.specification = normalized_specification
+        item.unit = normalized_unit
+        item.supplier = supplier
+        item.location = location
+        item.notes = normalized_notes
+
+    item.quantity_on_hand = Decimal(item.quantity_on_hand) + quantity
+    item.last_receipt_at = occurred_on
+
+    transaction = InventoryTransaction(
+        item_id=item.id,
+        transaction_type=TransactionType.receipt,
+        quantity=quantity,
+        occurred_on=occurred_on,
+        operator_name=normalized_operator_name,
+        reference_code=normalized_reference_code,
+        notes=normalized_notes or "手动录入库存",
+    )
+    session.add(transaction)
+    session.commit()
+    session.refresh(item)
+    session.refresh(transaction)
+    return item, transaction, created_item
 
 
 def list_item_transactions(session: Session, item_id: int, limit: int = 12) -> list[InventoryTransaction]:
