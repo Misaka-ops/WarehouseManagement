@@ -56,6 +56,14 @@ const rowInputs = reactive<Record<string, number>>({})
 const unmatchedCount = computed(() => editableItems.value.filter((item) => item.inventory_item_id == null).length)
 const fileLabel = computed(() => selectedFile.value?.name ?? '尚未选择采购 Excel 文件')
 const feishuPreviewOrders = computed(() => feishuPreviewResult.value?.orders ?? [])
+const latestImportedPurchaseItemIds = computed(() =>
+  importResult.value?.imported_items.map((item) => item.purchase_item_id).join(',') ?? '',
+)
+const latestReceivingRouteQuery = computed(() =>
+  latestImportedPurchaseItemIds.value
+    ? { source: 'purchase-import', purchaseItemIds: latestImportedPurchaseItemIds.value }
+    : { source: 'purchase-import' },
+)
 const importableFeishuOrders = computed(() => feishuPreviewOrders.value.filter((order) => order.can_import))
 const importableFeishuInstanceCodes = computed(() => importableFeishuOrders.value.map((order) => order.instance_code))
 const selectedFeishuOrders = computed(() =>
@@ -102,6 +110,22 @@ function formatDate(value: string | null) {
 
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('zh-CN')
+}
+
+function formatInventoryOptionLabel(item: {
+  material_name: string
+  specification: string | null
+  unit: string | null
+  supplier_name: string | null
+  location_name: string | null
+}) {
+  return [
+    item.material_name,
+    item.specification || '未填规格',
+    `单位 ${item.unit || '未填'}`,
+    `供应商 ${item.supplier_name || '未填'}`,
+    `区位 ${item.location_name || '未填'}`,
+  ].join(' / ')
 }
 
 function syncStates(nextStates: PurchaseImportState[]) {
@@ -389,7 +413,7 @@ onMounted(async () => {
           <div class="import-notes compact-notes">
             <article class="note-card warm-note">
               <strong>匹配规则</strong>
-              <p>物料名称和规格型号会精确匹配库存项。</p>
+              <p>当前系统默认按“物料名称 + 规格型号”精确匹配；如果不稳妥，可在下方人工对齐库存项。</p>
             </article>
             <article class="note-card warm-note">
               <strong>飞书同步</strong>
@@ -412,8 +436,8 @@ onMounted(async () => {
             <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
               {{ syncingFeishu ? '同步中...' : '同步并预览飞书采购申请' }}
             </button>
-            <RouterLink class="action-link ghost" :to="{ path: '/purchase-receiving', query: { source: 'purchase-import' } }">
-              去看采购收货
+            <RouterLink class="action-link ghost" :to="{ path: '/purchase-receiving', query: latestReceivingRouteQuery }">
+              {{ importResult?.imported_items?.length ? '去处理本次导入待收货' : '去看采购收货' }}
             </RouterLink>
           </div>
         </div>
@@ -442,6 +466,21 @@ onMounted(async () => {
           <span>未匹配库存项</span>
           <strong>{{ importResult.unmatched_item_count }}</strong>
         </article>
+      </div>
+
+      <div class="selection-toolbar business-toolbar import-context-toolbar">
+        <div class="selection-status">
+          <span>下一步</span>
+          <strong>带着本次导入范围进入采购收货</strong>
+          <small>进入后默认只看这次导入的 {{ importResult.imported_item_count }} 条待收货，避免在全部列表里重新查找。</small>
+        </div>
+
+        <div class="selection-actions">
+          <RouterLink class="action-link" :to="{ path: '/purchase-receiving', query: latestReceivingRouteQuery }">
+            处理本次导入待收货
+          </RouterLink>
+          <button class="action-link ghost" type="button" @click="resultDialogVisible = true">查看并调整导入明细</button>
+        </div>
       </div>
     </section>
 
@@ -485,7 +524,19 @@ onMounted(async () => {
             </div>
             <div class="console-row-actions">
               <button class="console-action ghost" type="button" @click="resultDialogVisible = true">编辑</button>
-              <RouterLink class="console-action secondary" to="/purchase-receiving">去收货</RouterLink>
+              <RouterLink
+                class="console-action secondary"
+                :to="{
+                  path: '/purchase-receiving',
+                  query: {
+                    source: 'purchase-import',
+                    purchaseItemId: item.purchase_item_id,
+                    purchaseItemIds: latestImportedPurchaseItemIds,
+                  },
+                }"
+              >
+                去收货
+              </RouterLink>
             </div>
           </article>
         </div>
@@ -666,7 +717,7 @@ onMounted(async () => {
           <select v-model="item.inventory_item_id" class="cell-input">
             <option :value="null">未匹配 / 留空</option>
             <option v-for="inventoryItem in inventoryItems" :key="inventoryItem.id" :value="inventoryItem.id">
-              {{ inventoryItem.material_name }} / {{ inventoryItem.specification || '未填规格' }}
+              {{ formatInventoryOptionLabel(inventoryItem) }}
             </option>
           </select>
         </div>

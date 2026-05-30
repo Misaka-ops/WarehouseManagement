@@ -38,6 +38,53 @@ const receiptForm = ref<PurchaseReceivePayload>({
   reference_code: 'RK-PO-',
   notes: '',
 })
+const sourceKey = computed(() => (typeof route.query.source === 'string' ? route.query.source : ''))
+const scopedPurchaseItemIds = computed(() => {
+  const rawValue = typeof route.query.purchaseItemIds === 'string' ? route.query.purchaseItemIds : ''
+  if (!rawValue.trim()) {
+    return []
+  }
+
+  return [...new Set(rawValue.split(',').map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))]
+})
+const scopedPendingReceipts = computed(() => {
+  if (!scopedPurchaseItemIds.value.length) {
+    return pendingReceipts.value
+  }
+
+  const scopedIdSet = new Set(scopedPurchaseItemIds.value)
+  return pendingReceipts.value.filter((item) => scopedIdSet.has(item.purchase_item_id))
+})
+const scopeMissingCount = computed(() => {
+  if (!scopedPurchaseItemIds.value.length) {
+    return 0
+  }
+
+  const currentIds = new Set(pendingReceipts.value.map((item) => item.purchase_item_id))
+  return scopedPurchaseItemIds.value.filter((itemId) => !currentIds.has(itemId)).length
+})
+const scopeTitle = computed(() => {
+  if (!scopedPurchaseItemIds.value.length) {
+    return ''
+  }
+
+  if (sourceKey.value === 'purchase-import') {
+    return `仅查看本次导入的 ${scopedPendingReceipts.value.length} 条待收货`
+  }
+
+  return `已按上下文锁定 ${scopedPendingReceipts.value.length} 条待收货`
+})
+const scopeDescription = computed(() => {
+  if (!scopedPurchaseItemIds.value.length) {
+    return ''
+  }
+
+  if (scopeMissingCount.value > 0) {
+    return `其中 ${scopeMissingCount.value} 条已不在待收货列表，可能已收货或已被清理。`
+  }
+
+  return '你现在可以在当前范围内继续筛选、单条确认或批量收货。'
+})
 
 function formatCurrency(value?: string | number | null) {
   if (value == null || value === '') {
@@ -55,7 +102,7 @@ function formatCurrency(value?: string | number | null) {
 const filteredPendingReceipts = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
 
-  return pendingReceipts.value.filter((item) => {
+  return scopedPendingReceipts.value.filter((item) => {
     const matchesKeyword =
       !keyword ||
       item.material_name.toLowerCase().includes(keyword) ||
@@ -168,20 +215,51 @@ function toggleSelectAllPending() {
   selectedItemIds.value = [...new Set([...selectedItemIds.value, ...allPendingIds.value])]
 }
 
+function resetBatchDraft() {
+  receiptForm.value.purchase_item_id = 0
+  receiptForm.value.quantity = 1
+  receiptForm.value.total_amount = null
+  receiptForm.value.supplier_name = ''
+  receiptForm.value.location_name = ''
+  receiptForm.value.notes = ''
+}
+
 function switchReceiveMode(mode: ReceiveMode) {
   receiveMode.value = mode
+  if (mode === 'batch') {
+    resetBatchDraft()
+    return
+  }
+
   if (mode === 'single') {
     selectedItemIds.value = []
+    if (selectedPendingReceipt.value) {
+      syncReceiptForm(selectedPendingReceipt.value)
+    }
   }
 }
 
 function syncRouteSelection() {
   const queryId = Number(route.query.purchaseItemId)
-  if (!Number.isFinite(queryId) || queryId <= 0) {
+  const targetId =
+    Number.isFinite(queryId) && queryId > 0
+      ? queryId
+      : scopedPurchaseItemIds.value.length === 1
+        ? scopedPurchaseItemIds.value[0]
+        : 0
+
+  if (!targetId) {
+    if (
+      selectedPendingReceipt.value &&
+      scopedPurchaseItemIds.value.length &&
+      !scopedPurchaseItemIds.value.includes(selectedPendingReceipt.value.purchase_item_id)
+    ) {
+      clearSingleSelection()
+    }
     return
   }
 
-  const matchedItem = pendingReceipts.value.find((item) => item.purchase_item_id === queryId)
+  const matchedItem = pendingReceipts.value.find((item) => item.purchase_item_id === targetId)
   if (matchedItem) {
     switchReceiveMode('single')
     syncReceiptForm(matchedItem)
@@ -389,7 +467,7 @@ watch(pendingReceipts, (items) => {
 })
 
 watch(
-  () => route.query.purchaseItemId,
+  () => [route.query.purchaseItemId, route.query.purchaseItemIds],
   () => {
     syncRouteSelection()
   },
@@ -409,7 +487,7 @@ onMounted(async () => {
           <p class="section-kicker">采购收货</p>
           <h3>先确认待收货对象，再执行收货入库</h3>
         </div>
-        <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `${pendingReceipts.length} 条待收货` }}</span>
+        <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `${scopedPendingReceipts.length} / ${pendingReceipts.length} 条待收货` }}</span>
       </div>
 
       <div class="status-strip workflow-strip">
@@ -432,16 +510,28 @@ onMounted(async () => {
         <span>库存总量 <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong></span>
         <span>待处理采购 <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong></span>
       </div>
+
+      <div v-if="scopedPurchaseItemIds.length" class="selection-toolbar business-toolbar receiving-scope-toolbar">
+        <div class="selection-status">
+          <span>当前范围</span>
+          <strong>{{ scopeTitle }}</strong>
+          <small>{{ scopeDescription }}</small>
+        </div>
+
+        <div class="selection-actions">
+          <RouterLink class="action-link ghost" to="/purchase-receiving">查看全部待收货</RouterLink>
+        </div>
+      </div>
     </section>
 
     <div class="content-grid">
       <section class="page-section">
-      <div class="section-heading">
+        <div class="section-heading">
         <div>
           <p class="section-kicker">待收货列表</p>
           <h3>{{ receiveMode === 'single' ? '单条确认收货' : '批量选择待收货明细' }}</h3>
         </div>
-        <span class="section-meta">{{ filteredPendingReceipts.length }} / {{ pendingReceipts.length }}</span>
+        <span class="section-meta">{{ filteredPendingReceipts.length }} / {{ scopedPendingReceipts.length }}</span>
       </div>
 
         <div class="segment-switch">
@@ -477,80 +567,178 @@ onMounted(async () => {
 
           <div class="selection-actions">
             <span>{{ selectedItemIds.length }} 项已勾选</span>
-            <button class="danger-button" :disabled="deleting || !hasSelectedPendingItems" type="button" @click="handleBulkDelete">
-              {{ deleting ? '删除中...' : '清理勾选明细（测试）' }}
-            </button>
+            <span>确认后会按勾选范围统一执行批量收货</span>
           </div>
         </div>
 
-        <div v-if="receiveMode === 'batch' && selectedPendingReceipts.length" class="subsection-panel selection-preview-panel">
-          <div class="subsection-heading">
-            <p>已选明细预览</p>
-            <span>
-              {{ batchSummary.locationCount > 1 ? `涉及 ${batchSummary.locationCount} 个区位` : '区位一致或未填写' }}
-            </span>
+        <div v-if="receiveMode === 'batch' && selectedPendingReceipts.length" class="inline-summary-row receiving-selection-row">
+          <span>已勾选 <strong>{{ batchSummary.itemCount }} 条</strong></span>
+          <span>待收总量 <strong>{{ batchSummary.totalQuantity }}</strong></span>
+          <span>
+            涉及供应商
+            <strong>
+              {{ batchSummary.supplierSummary }}<template v-if="batchSummary.supplierCount > 2"> 等 {{ batchSummary.supplierCount }} 个</template>
+            </strong>
+          </span>
+          <span>
+            涉及区位
+            <strong>{{ batchSummary.locationCount > 1 ? `${batchSummary.locationCount} 个` : '单一区位或未填' }}</strong>
+          </span>
+        </div>
+
+        <p v-if="receiveMode === 'batch' && selectedPendingReceipts.length" class="field-hint receiving-selection-note">
+          示例明细：{{ batchSummary.previewItems.join('；') || '先从左侧勾选待收货明细' }}<template v-if="batchSummary.remainingPreviewCount">；其余 {{ batchSummary.remainingPreviewCount }} 条</template>
+        </p>
+
+        <div class="console-table desktop-only">
+          <div class="console-table-scroll">
+            <table class="console-data-table dense-table receiving-data-table">
+              <colgroup>
+                <col style="width: 64px" />
+                <col style="width: 300px" />
+                <col style="width: 200px" />
+                <col style="width: 150px" />
+                <col style="width: 108px" />
+                <col style="width: 108px" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="console-data-head center">选择</th>
+                  <th>物料对象</th>
+                  <th>请购 / 区位</th>
+                  <th class="align-right">待收 / 已收</th>
+                  <th class="align-right">金额</th>
+                  <th class="align-right">到货</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in filteredPendingReceipts"
+                  :key="item.purchase_item_id"
+                  :data-purchase-item-id="item.purchase_item_id"
+                  class="console-data-row interactive"
+                  :class="{
+                    active:
+                      receiveMode === 'single'
+                        ? item.purchase_item_id === selectedPendingReceiptId
+                        : selectedItemIds.includes(item.purchase_item_id),
+                  }"
+                  @click="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
+                >
+                  <td class="console-data-cell center v-middle">
+                    <label v-if="receiveMode === 'batch'" class="console-checkbox" @click.stop>
+                      <input
+                        :checked="selectedItemIds.includes(item.purchase_item_id)"
+                        type="checkbox"
+                        @change="toggleItemSelection(item.purchase_item_id)"
+                      />
+                    </label>
+                    <span v-else :class="['console-badge', item.purchase_item_id === selectedPendingReceiptId ? 'ok' : 'neutral']">
+                      {{ item.purchase_item_id === selectedPendingReceiptId ? '已选' : '待选' }}
+                    </span>
+                  </td>
+                  <td class="console-data-cell">
+                    <div class="console-cell">
+                      <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+                      <small class="console-subline" :title="item.specification || '未填规格'">规格：{{ item.specification || '未填规格' }}</small>
+                      <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
+                    </div>
+                  </td>
+                  <td class="console-data-cell">
+                    <div class="console-cell">
+                      <span class="muted console-clamp-2" :title="item.requester || '未填请购人'">{{ item.requester || '未填请购人' }}</span>
+                      <small class="console-subline" :title="item.location_name || '未填区位'">区位：{{ item.location_name || '未填区位' }}</small>
+                    </div>
+                  </td>
+                  <td class="console-data-cell align-right v-middle">
+                    <div class="console-cell align-right">
+                      <span class="console-badge info">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
+                      <small class="console-subline">已收 {{ item.received_quantity }} {{ item.unit || '件' }}</small>
+                    </div>
+                  </td>
+                  <td class="console-data-cell align-right v-middle">
+                    <div class="console-cell muted console-nowrap align-right" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
+                  </td>
+                  <td class="console-data-cell align-right v-middle">
+                    <div class="console-cell muted console-nowrap align-right" :title="item.expected_arrival || '未记录'">{{ item.expected_arrival || '未记录' }}</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
-          <div class="selection-preview-grid">
-            <article v-for="item in selectedPendingReceipts.slice(0, 6)" :key="item.purchase_item_id" class="selection-preview-card">
-              <strong>{{ item.material_name }}</strong>
-              <span>{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
-              <p>{{ item.supplier_name || '未填供应商' }} / {{ item.location_name || '未填区位' }}</p>
+          <div v-if="pendingReceiptsLoading" class="console-empty">正在加载待收货明细...</div>
+          <div v-else-if="!filteredPendingReceipts.length" class="console-empty">
+            {{ scopedPendingReceipts.length ? '当前筛选条件下没有匹配明细。' : '当前没有待收货采购明细。' }}
+          </div>
+        </div>
+
+        <div class="mobile-only mobile-flow-stack">
+          <div class="stack-list">
+            <article
+              v-for="item in filteredPendingReceipts"
+              :key="item.purchase_item_id"
+              class="data-row clickable triplet receipt-card mobile-task-card"
+              role="button"
+              tabindex="0"
+              :class="{
+                active:
+                  receiveMode === 'single'
+                    ? item.purchase_item_id === selectedPendingReceiptId
+                    : selectedItemIds.includes(item.purchase_item_id),
+              }"
+              @click="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
+              @keydown.enter.prevent="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
+              @keydown.space.prevent="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
+            >
+              <div v-if="receiveMode === 'batch'" class="row-checkbox" @click.stop>
+                <input
+                  :checked="selectedItemIds.includes(item.purchase_item_id)"
+                  type="checkbox"
+                  @change="toggleItemSelection(item.purchase_item_id)"
+                />
+              </div>
+
+              <div class="data-row-main">
+                <div class="data-row-head">
+                  <strong>{{ item.material_name }}</strong>
+                  <span class="data-row-badge">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
+                </div>
+                <div class="data-row-meta">
+                  <span>规格：{{ item.specification || '未填规格' }}</span>
+                  <span>供应商：{{ item.supplier_name || '未填供应商' }}</span>
+                  <span>请购人：{{ item.requester || '未填' }}</span>
+                  <span>金额：{{ formatCurrency(item.total_amount) }}</span>
+                  <span>区位：{{ item.location_name || '未填区位' }}</span>
+                  <span>已收：{{ item.received_quantity }} {{ item.unit || '件' }}</span>
+                  <span>到货：{{ item.expected_arrival || '未记录' }}</span>
+                </div>
+              </div>
             </article>
-          </div>
 
-          <p v-if="selectedPendingReceipts.length > 6" class="field-hint">
-            其余 {{ selectedPendingReceipts.length - 6 }} 条会按同样规则处理，请在提交前继续核对左侧列表。
-          </p>
-        </div>
-
-        <div class="stack-list">
-          <article
-            v-for="item in filteredPendingReceipts"
-            :key="item.purchase_item_id"
-            class="data-row clickable triplet receipt-card"
-            role="button"
-            tabindex="0"
-            :class="{
-              active:
-                receiveMode === 'single'
-                  ? item.purchase_item_id === selectedPendingReceiptId
-                  : selectedItemIds.includes(item.purchase_item_id),
-            }"
-            @click="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
-            @keydown.enter.prevent="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
-            @keydown.space.prevent="receiveMode === 'single' ? syncReceiptForm(item) : toggleItemSelection(item.purchase_item_id)"
-          >
-            <div v-if="receiveMode === 'batch'" class="row-checkbox" @click.stop>
-              <input
-                :checked="selectedItemIds.includes(item.purchase_item_id)"
-                type="checkbox"
-                @change="toggleItemSelection(item.purchase_item_id)"
-              />
+            <div v-if="pendingReceiptsLoading" class="empty-state">正在加载待收货明细...</div>
+            <div v-else-if="!filteredPendingReceipts.length" class="empty-state">
+              {{ scopedPendingReceipts.length ? '当前筛选条件下没有匹配明细。' : '当前没有待收货采购明细。' }}
             </div>
-
-            <div class="data-row-main">
-              <div class="data-row-head">
-                <strong>{{ item.material_name }}</strong>
-                <span class="data-row-badge">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
-              </div>
-              <div class="data-row-meta">
-                <span>规格：{{ item.specification || '未填规格' }}</span>
-                <span>供应商：{{ item.supplier_name || '未填供应商' }}</span>
-                <span>请购人：{{ item.requester || '未填' }}</span>
-                <span>金额：{{ formatCurrency(item.total_amount) }}</span>
-                <span>区位：{{ item.location_name || '未填' }}</span>
-                <span>已收：{{ item.received_quantity }} {{ item.unit || '件' }}</span>
-                <span>到货：{{ item.expected_arrival || '未记录' }}</span>
-              </div>
-            </div>
-          </article>
-
-          <div v-if="pendingReceiptsLoading" class="empty-state">正在加载待收货明细...</div>
-          <div v-else-if="!filteredPendingReceipts.length" class="empty-state">
-            {{ pendingReceipts.length ? '当前筛选条件下没有匹配明细。' : '当前没有待收货采购明细。' }}
           </div>
         </div>
+
+        <details v-if="receiveMode === 'batch'" class="test-tools-panel">
+          <summary>开发测试清理 <small>{{ selectedItemIds.length }} 项已勾选</small></summary>
+          <div class="selection-toolbar selection-toolbar-inline">
+            <div class="selection-status">
+              <span>危险操作</span>
+              <strong>删除当前勾选的待收货明细</strong>
+              <small>只建议在测试环境清理数据时使用，不属于正常采购收货流程。</small>
+            </div>
+
+            <div class="selection-actions">
+              <button class="danger-button" :disabled="deleting || !hasSelectedPendingItems" type="button" @click="handleBulkDelete">
+                {{ deleting ? '删除中...' : '删除勾选明细' }}
+              </button>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section class="page-section">

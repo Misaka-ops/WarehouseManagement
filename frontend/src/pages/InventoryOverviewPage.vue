@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { deleteInventoryItems } from '../services/api'
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
 
+const route = useRoute()
 const { dashboard, historyLoading, inventoryItems, itemTransactions, loading, loadDashboard, selectItem, selectedItem, selectedItemId } =
   useInventoryWorkspace()
 
@@ -38,6 +40,10 @@ const allFilteredSelected = computed(
   () => allFilteredIds.value.length > 0 && selectedFilteredIds.value.length === allFilteredIds.value.length,
 )
 const hasSelectedDeleteItems = computed(() => selectedDeleteIds.value.length > 0)
+const routeItemId = computed(() => {
+  const queryId = Number(route.query.itemId)
+  return Number.isFinite(queryId) && queryId > 0 ? queryId : null
+})
 
 function formatCurrency(value?: string | number | null) {
   if (value == null || value === '') {
@@ -104,13 +110,46 @@ async function handleBulkDelete() {
   }
 }
 
+async function scrollItemIntoView(itemId: number) {
+  await nextTick()
+  document
+    .querySelector<HTMLElement>(`[data-item-id="${itemId}"]`)
+    ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
+async function syncRouteSelection() {
+  if (!routeItemId.value) {
+    return
+  }
+
+  const matchedItem = inventoryItems.value.find((item) => item.id === routeItemId.value)
+  if (!matchedItem) {
+    return
+  }
+
+  if (selectedItemId.value !== matchedItem.id) {
+    selectItem(matchedItem)
+  }
+
+  await scrollItemIntoView(matchedItem.id)
+}
+
 watch(inventoryItems, (items) => {
   const currentIds = new Set(items.map((item) => item.id))
   selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => currentIds.has(id))
+  void syncRouteSelection()
 })
+
+watch(
+  () => route.query.itemId,
+  () => {
+    void syncRouteSelection()
+  },
+)
 
 onMounted(async () => {
   await loadDashboard()
+  await syncRouteSelection()
 })
 </script>
 
@@ -205,48 +244,23 @@ onMounted(async () => {
         </div>
       </div>
 
-      <details class="test-tools-panel">
-        <summary>测试清理工具 <small>{{ selectedDeleteIds.length }} 项已勾选</small></summary>
-        <div class="selection-toolbar selection-toolbar-inline">
-          <label class="checkbox-chip">
-            <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
-            <span>全选当前筛选结果</span>
-          </label>
-
-          <div class="selection-actions">
-            <span>仅用于开发清理</span>
-            <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
-              {{ deleting ? '删除中...' : '删除勾选库存' }}
-            </button>
-          </div>
-        </div>
-
-        <p class="field-hint dev-note">批量删除仅用于当前测试阶段的数据清理，正常作业请使用上方选中后的作业入口。</p>
-      </details>
-
       <div class="console-table sticky-head-table desktop-only">
         <div class="console-table-scroll">
-          <table class="console-data-table">
+          <table class="console-data-table dense-table overview-data-table">
             <colgroup>
               <col style="width: 56px" />
-              <col style="width: 240px" />
-              <col style="width: 180px" />
-              <col style="width: 90px" />
-              <col style="width: 110px" />
-              <col style="width: 130px" />
-              <col style="width: 130px" />
-              <col style="width: 130px" />
-              <col style="width: 150px" />
-              <col style="width: 150px" />
+              <col style="width: 300px" />
+              <col style="width: 200px" />
+              <col style="width: 116px" />
+              <col style="width: 104px" />
+              <col style="width: 112px" />
+              <col style="width: 112px" />
             </colgroup>
             <thead>
               <tr>
                 <th class="console-data-head center">选中</th>
-                <th>物料</th>
-                <th>规格</th>
-                <th>单位</th>
-                <th>供应商</th>
-                <th>区位</th>
+                <th>物料对象</th>
+                <th>区位 / 项目</th>
                 <th>库存</th>
                 <th>金额</th>
                 <th>最近入库</th>
@@ -257,6 +271,7 @@ onMounted(async () => {
               <tr
                 v-for="item in filteredItems"
                 :key="item.id"
+                :data-item-id="item.id"
                 class="console-data-row interactive"
                 :class="{ active: item.id === selectedItemId }"
                 @click="selectItem(item)"
@@ -273,34 +288,30 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+                    <small class="console-subline" :title="item.specification || '未填规格'">规格：{{ item.specification || '未填规格' }}</small>
+                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
+                  <div class="console-cell">
+                    <span class="muted console-clamp-2" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</span>
+                    <small class="console-subline" :title="item.project_name || '未填项目'">项目：{{ item.project_name || '未填项目' }}</small>
+                  </div>
                 </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
-                </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell">
                     <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
                       {{ item.quantity_on_hand }} {{ item.unit || '件' }}
                     </span>
                   </div>
                 </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
                 </td>
               </tr>
@@ -317,6 +328,7 @@ onMounted(async () => {
           <article
             v-for="item in filteredItems"
             :key="item.id"
+            :data-item-id="item.id"
             class="data-row clickable triplet mobile-task-card"
             :class="{ active: item.id === selectedItemId }"
             role="button"
@@ -356,6 +368,25 @@ onMounted(async () => {
           <div v-else-if="!filteredItems.length" class="empty-state">没有匹配到库存项目。</div>
         </div>
       </div>
+
+      <details class="test-tools-panel">
+        <summary>开发测试清理 <small>{{ selectedDeleteIds.length }} 项已勾选</small></summary>
+        <div class="selection-toolbar selection-toolbar-inline">
+          <label class="checkbox-chip">
+            <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
+            <span>全选当前筛选结果</span>
+          </label>
+
+          <div class="selection-actions">
+            <span>仅用于开发阶段数据清理</span>
+            <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
+              {{ deleting ? '删除中...' : '删除勾选库存' }}
+            </button>
+          </div>
+        </div>
+
+        <p class="field-hint dev-note">这里会一并删除库存流水和关联收货关系，正常作业请使用上方台账与作业入口。</p>
+      </details>
     </section>
 
     <section class="page-section">

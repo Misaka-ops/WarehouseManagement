@@ -227,51 +227,64 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="console-table desktop-only">
+      <div class="console-table sticky-head-table desktop-only">
         <div class="console-table-scroll">
-          <div class="console-table-header inventory-pick-table-grid">
-            <span class="console-header-cell">物料</span>
-            <span class="console-header-cell">规格</span>
-            <span class="console-header-cell">单位</span>
-            <span class="console-header-cell">供应商</span>
-            <span class="console-header-cell">区位</span>
-            <span class="console-header-cell">项目</span>
-            <span class="console-header-cell align-right">库存</span>
-            <span class="console-header-cell align-right">最近入库</span>
-            <span class="console-header-cell">操作</span>
-          </div>
-
-          <article
-            v-for="item in filteredItems"
-            :key="item.id"
-            class="console-table-row inventory-pick-table-grid interactive"
-            role="button"
-            tabindex="0"
-            :class="{ active: item.id === selectedItemId }"
-            @click="chooseInventoryItem(item)"
-            @keydown.enter.prevent="chooseInventoryItem(item)"
-            @keydown.space.prevent="chooseInventoryItem(item)"
-          >
-            <div class="console-cell">
-              <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-            </div>
-            <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
-            <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
-            <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
-            <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
-            <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填'">{{ item.project_name || '未填' }}</div>
-            <div class="console-cell align-right">
-              <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
-                {{ item.quantity_on_hand }} {{ item.unit || '件' }}
-              </span>
-            </div>
-            <div class="console-cell muted console-nowrap align-right" :title="item.last_receipt_at || '未记录'">
-              {{ item.last_receipt_at || '未记录' }}
-            </div>
-            <div class="console-row-actions" @click.stop>
-              <button class="console-action primary" type="button" @click="chooseInventoryItem(item)">选择</button>
-            </div>
-          </article>
+          <table class="console-data-table dense-table operation-pick-table">
+            <colgroup>
+              <col style="width: 280px" />
+              <col style="width: 220px" />
+              <col style="width: 112px" />
+              <col style="width: 118px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>物料</th>
+                <th>规格 / 区位</th>
+                <th class="align-right">库存</th>
+                <th class="align-right">最近入库</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in filteredItems"
+                :key="item.id"
+                class="console-data-row interactive"
+                :class="{ active: item.id === selectedItemId }"
+                role="button"
+                tabindex="0"
+                @click="chooseInventoryItem(item)"
+                @keydown.enter.prevent="chooseInventoryItem(item)"
+                @keydown.space.prevent="chooseInventoryItem(item)"
+              >
+                <td class="console-data-cell">
+                  <div class="console-cell">
+                    <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填' }}</small>
+                  </div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell">
+                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
+                    <small class="console-subline" :title="`${item.location_name || '未填区位'} / ${item.project_name || '未填项目'}`">
+                      区位：{{ item.location_name || '未填区位' }} / 项目：{{ item.project_name || '未填' }}
+                    </small>
+                  </div>
+                </td>
+                <td class="console-data-cell align-right v-middle">
+                  <div class="console-cell align-right">
+                    <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
+                      {{ item.quantity_on_hand }} {{ item.unit || '件' }}
+                    </span>
+                  </div>
+                </td>
+                <td class="console-data-cell align-right v-middle">
+                  <div class="console-cell muted console-nowrap align-right" :title="item.last_receipt_at || '未记录'">
+                    {{ item.last_receipt_at || '未记录' }}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div v-if="loading" class="console-empty">正在加载库存数据...</div>
@@ -299,16 +312,13 @@ onMounted(async () => {
                 </span>
               </div>
               <div class="data-row-meta">
-                <span>规格：{{ item.specification || '未填' }}</span>
+                <span>规格：{{ item.specification || '未填规格' }}</span>
+                <span>单位：{{ item.unit || '件' }}</span>
                 <span>供应商：{{ item.supplier_name || '未填' }}</span>
-                <span>区位：{{ item.location_name || '未填' }}</span>
+                <span>区位：{{ item.location_name || '未填区位' }}</span>
                 <span>项目：{{ item.project_name || '未填' }}</span>
                 <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
               </div>
-            </div>
-
-            <div class="data-row-actions">
-              <button class="action-link" type="button" @click.stop="chooseInventoryItem(item)">选择</button>
             </div>
           </article>
 
@@ -334,36 +344,55 @@ onMounted(async () => {
         </div>
 
         <form class="form-stack" @submit.prevent="submitTransaction">
-          <div class="receipt-summary emphasis-summary">
-            <p>物料：{{ selectedItem?.material_name || '未选择' }}</p>
-            <p>规格：{{ selectedItem?.specification || '未填规格' }}</p>
-            <p>区位：{{ selectedItem?.location_name || '未填区位' }}</p>
-            <p>当前库存：{{ selectedItem?.quantity_on_hand || '--' }} {{ selectedItem?.unit || '件' }}</p>
-            <p>本次变动后：{{ selectedItem ? projectedStockQuantity : '--' }} {{ selectedItem?.unit || '件' }}</p>
+          <div class="receipt-summary emphasis-summary operation-summary">
+            <p>
+              <span class="summary-label">物料</span>
+              <strong>{{ selectedItem?.material_name || '未选择' }}</strong>
+            </p>
+            <p>
+              <span class="summary-label">规格 / 单位</span>
+              <strong>{{ selectedItem?.specification || '未填规格' }} / {{ selectedItem?.unit || '件' }}</strong>
+            </p>
+            <p>
+              <span class="summary-label">区位 / 项目</span>
+              <strong>{{ selectedItem?.location_name || '未填区位' }} / {{ selectedItem?.project_name || '未填项目' }}</strong>
+            </p>
+            <p>
+              <span class="summary-label">当前库存</span>
+              <strong>{{ selectedItem?.quantity_on_hand || '--' }} {{ selectedItem?.unit || '件' }}</strong>
+            </p>
+            <p>
+              <span class="summary-label">供应商</span>
+              <strong>{{ selectedItem?.supplier_name || '未填' }}</strong>
+            </p>
+            <p>
+              <span class="summary-label">变动后</span>
+              <strong>{{ selectedItem ? projectedStockQuantity : '--' }} {{ selectedItem?.unit || '件' }}</strong>
+            </p>
           </div>
 
-          <label class="field">
-            <span>数量</span>
-            <div class="quantity-editor">
-              <button class="qty-button" type="button" @click="nudgeQuantity(-1)">-1</button>
-              <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" inputmode="decimal" />
-              <button class="qty-button" type="button" @click="nudgeQuantity(1)">+1</button>
-            </div>
-            <small v-if="quantityError" class="field-hint danger">{{ quantityError }}</small>
-            <small v-else class="field-hint">{{ isReceipt ? '数量会累加到当前库存。' : '提交后会从当前库存中扣减。' }}</small>
-          </label>
+          <div class="operation-form-grid">
+            <label class="field">
+              <span>数量</span>
+              <div class="quantity-editor">
+                <button class="qty-button" type="button" @click="nudgeQuantity(-1)">-1</button>
+                <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" inputmode="decimal" />
+                <button class="qty-button" type="button" @click="nudgeQuantity(1)">+1</button>
+              </div>
+              <div class="chip-row">
+                <button v-for="qty in quickQuantities" :key="qty" class="quick-chip" type="button" @click="applyQuickQuantity(qty)">
+                  {{ qty }}
+                </button>
+              </div>
+              <small v-if="quantityError" class="field-hint danger">{{ quantityError }}</small>
+              <small v-else class="field-hint">{{ isReceipt ? '数量会累加到当前库存。' : '提交后会从当前库存中扣减。' }}</small>
+            </label>
 
-          <div class="chip-row">
-            <button v-for="qty in quickQuantities" :key="qty" class="quick-chip" type="button" @click="applyQuickQuantity(qty)">
-              {{ qty }}
-            </button>
-          </div>
-
-          <div class="toolbar-grid dual">
             <label class="field">
               <span>业务日期</span>
               <input v-model="form.occurred_on" type="date" />
               <small v-if="occurredOnError" class="field-hint danger">{{ occurredOnError }}</small>
+              <small v-else class="field-hint">按实际发生日期登记。</small>
             </label>
 
             <label class="field">
@@ -373,15 +402,17 @@ onMounted(async () => {
             </label>
           </div>
 
-          <label class="field">
-            <span>单号 / 引用</span>
-            <input v-model="form.reference_code" type="text" :placeholder="`例如 ${referencePrefix}20260530-01`" />
-          </label>
+          <div class="operation-form-grid secondary">
+            <label class="field">
+              <span>单号 / 引用</span>
+              <input v-model="form.reference_code" type="text" :placeholder="`例如 ${referencePrefix}20260530-01`" />
+            </label>
 
-          <label class="field">
-            <span>备注</span>
-            <textarea v-model="form.notes" rows="4" placeholder="补充本次收发说明"></textarea>
-          </label>
+            <label class="field span-2">
+              <span>备注</span>
+              <textarea v-model="form.notes" rows="4" placeholder="补充本次收发说明"></textarea>
+            </label>
+          </div>
 
           <p v-if="issueBlockedReason" class="form-hint danger-text">{{ issueBlockedReason }}</p>
 
@@ -397,7 +428,9 @@ onMounted(async () => {
             <p class="section-kicker">辅助核对</p>
             <h3>{{ selectedItem ? '最近流水' : '还没有选择物料' }}</h3>
           </div>
-          <span class="section-meta">{{ selectedItem ? `物料 #${selectedItem.id}` : '请先选择对象' }}</span>
+          <span class="section-meta">
+            {{ selectedItem ? `当前库存 ${selectedItem.quantity_on_hand} ${selectedItem.unit || '件'}` : '请先选择对象' }}
+          </span>
         </div>
 
         <div class="link-row">

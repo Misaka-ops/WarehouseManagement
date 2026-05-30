@@ -7,58 +7,41 @@ import { usePendingReceipts } from '../composables/usePendingReceipts'
 const { dashboard, inventoryItems, loading, loadDashboard } = useInventoryWorkspace()
 const { loadPendingReceipts, pendingReceipts, pendingReceiptsLoading } = usePendingReceipts()
 
-const focusCards = [
-  {
-    to: '/overview',
-    kicker: '库存台账',
-    title: '查库存并看流水',
-    description: '快速定位物料，核对区位、单位和最近收发记录。',
-    action: '进入台账',
-  },
+const primaryActions = [
   {
     to: '/purchase-receiving',
-    kicker: '采购入库',
-    title: '处理待收货采购',
-    description: '按待收货明细确认收货，避免采购与库存脱节。',
-    action: '去收货入库',
+    label: '去处理采购收货',
+    tone: 'primary',
+  },
+  {
+    to: '/overview',
+    label: '去看库存台账',
+    tone: 'ghost',
   },
   {
     to: '/receipt',
-    kicker: '库存作业',
-    title: '直接入库',
-    description: '处理补货、退货、盘盈等非采购型入库。',
-    action: '开始入库',
+    label: '直接入库',
+    tone: 'secondary',
   },
   {
     to: '/issue',
-    kicker: '库存作业',
-    title: '直接出库',
-    description: '按领用或发放场景登记出库并同步流水。',
-    action: '开始出库',
+    label: '直接出库',
+    tone: 'ghost',
   },
 ]
 
-const supportCards = [
+const maintenanceActions = [
   {
     to: '/purchase-import',
-    kicker: '采购入库',
-    title: '采购单导入与同步',
-    description: '导入 Excel 或同步飞书，先形成待收货池。',
-    action: '导入采购单',
+    label: '采购导入',
   },
   {
     to: '/inventory-manual',
-    kicker: '数据维护',
-    title: '手动录入库存',
-    description: '补录散件、盘点修正和临时库存。',
-    action: '手动录入',
+    label: '手动录入库存',
   },
   {
     to: '/inventory-export',
-    kicker: '数据维护',
-    title: '库存导出',
-    description: '导出当前库存，继续线下交接或归档。',
-    action: '导出库存',
+    label: '库存导出',
   },
 ]
 
@@ -67,6 +50,28 @@ const lowStockItems = computed(() =>
 )
 
 const pendingPreviewItems = computed(() => pendingReceipts.value.slice(0, 6))
+const lowStockSummary = computed(() => {
+  if (loading.value) {
+    return '正在整理低库存预警。'
+  }
+
+  if (!lowStockItems.value.length) {
+    return '当前没有低库存预警项。'
+  }
+
+  return `${dashboard.value?.summary.low_stock_items ?? lowStockItems.value.length} 条低库存，建议优先回台账确认区位和补货路径。`
+})
+const pendingSummary = computed(() => {
+  if (pendingReceiptsLoading.value) {
+    return '正在整理待收货明细。'
+  }
+
+  if (!pendingReceipts.value.length) {
+    return '当前没有待收货采购积压。'
+  }
+
+  return `${pendingReceipts.value.length} 条待收货采购，建议优先核对本次到货并完成入库。`
+})
 
 const workbenchSummary = computed(() => {
   if (!dashboard.value) {
@@ -118,41 +123,63 @@ onMounted(async () => {
         <strong>{{ pendingReceiptsLoading ? '--' : pendingReceipts.length }}</strong>
       </article>
     </div>
-  </section>
 
-  <section class="page-section">
-    <div class="section-heading">
-      <div>
-        <p class="section-kicker">高频作业</p>
-        <h3>先放最常用的四个入口</h3>
+    <div class="workbench-lane-grid">
+      <article class="workbench-lane urgent">
+        <div class="workbench-lane-head">
+          <div>
+            <p class="section-kicker">库存异常</p>
+            <h4>低库存预警</h4>
+          </div>
+          <span class="console-badge warn">{{ dashboard?.summary.low_stock_items ?? '--' }} 条</span>
+        </div>
+        <p>{{ lowStockSummary }}</p>
+        <div class="workbench-action-row">
+          <RouterLink class="action-link ghost" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看预警对象</RouterLink>
+          <RouterLink class="action-link secondary" to="/receipt">直接补录入库</RouterLink>
+        </div>
+      </article>
+
+      <article class="workbench-lane">
+        <div class="workbench-lane-head">
+          <div>
+            <p class="section-kicker">采购待办</p>
+            <h4>待收货采购</h4>
+          </div>
+          <span class="console-badge info">{{ pendingReceiptsLoading ? '--' : pendingReceipts.length }} 条</span>
+        </div>
+        <p>{{ pendingSummary }}</p>
+        <div class="workbench-action-row">
+          <RouterLink class="action-link primary" :to="{ path: '/purchase-receiving', query: { source: 'workbench-pending' } }">进入采购收货</RouterLink>
+          <RouterLink class="action-link ghost" to="/purchase-import">继续导入采购</RouterLink>
+        </div>
+      </article>
+    </div>
+
+    <div class="workbench-action-strip">
+      <div class="workbench-action-group">
+        <span>常用作业</span>
+        <div class="workbench-action-row">
+          <RouterLink
+            v-for="action in primaryActions"
+            :key="action.to"
+            :to="action.to"
+            class="action-link"
+            :class="action.tone"
+          >
+            {{ action.label }}
+          </RouterLink>
+        </div>
       </div>
-      <span class="section-meta">减少来回切页</span>
-    </div>
 
-    <div class="module-grid priority-grid">
-      <RouterLink v-for="card in focusCards" :key="card.to" :to="card.to" class="module-card">
-        <span class="module-kicker">{{ card.kicker }}</span>
-        <h4>{{ card.title }}</h4>
-        <p>{{ card.description }}</p>
-        <strong>{{ card.action }}</strong>
-      </RouterLink>
-    </div>
-
-    <div class="section-heading secondary-heading">
-      <div>
-        <p class="section-kicker">辅助入口</p>
-        <h3>低频维护和数据交接放在这里</h3>
+      <div class="workbench-action-group compact">
+        <span>补录与交接</span>
+        <div class="workbench-action-row">
+          <RouterLink v-for="action in maintenanceActions" :key="action.to" :to="action.to" class="action-link ghost">
+            {{ action.label }}
+          </RouterLink>
+        </div>
       </div>
-      <span class="section-meta">减少工作台主屏干扰</span>
-    </div>
-
-    <div class="module-grid support-grid">
-      <RouterLink v-for="card in supportCards" :key="card.to" :to="card.to" class="module-card subdued utility-card">
-        <span class="module-kicker">{{ card.kicker }}</span>
-        <h4>{{ card.title }}</h4>
-        <p>{{ card.description }}</p>
-        <strong>{{ card.action }}</strong>
-      </RouterLink>
     </div>
   </section>
 
@@ -168,19 +195,17 @@ onMounted(async () => {
 
       <div class="console-table desktop-only">
         <div class="console-table-scroll workbench-table-scroll">
-          <table class="console-data-table workbench-data-table">
+          <table class="console-data-table dense-table workbench-data-table">
             <colgroup>
-              <col style="width: 30%" />
-              <col style="width: 26%" />
-              <col style="width: 14%" />
-              <col style="width: 14%" />
+              <col style="width: 38%" />
+              <col style="width: 28%" />
               <col style="width: 16%" />
+              <col style="width: 18%" />
             </colgroup>
             <thead>
               <tr>
                 <th>物料</th>
-                <th>规格</th>
-                <th>区位</th>
+                <th>规格 / 区位</th>
                 <th>采购人</th>
                 <th class="align-right">库存</th>
               </tr>
@@ -195,15 +220,15 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                  <div class="console-cell">
+                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
+                    <small class="console-subline" :title="item.location_name || '未填区位'">区位：{{ item.location_name || '未填区位' }}</small>
+                  </div>
                 </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
-                </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
                 </td>
-                <td class="console-data-cell align-right">
+                <td class="console-data-cell align-right v-middle">
                   <span class="console-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
                 </td>
               </tr>
@@ -242,7 +267,7 @@ onMounted(async () => {
       </div>
 
       <div class="console-table-caption">
-        <span>点击物料名称可直接进入库存台账定位该物料。</span>
+        <span>点击物料名称可直接带着上下文回到库存台账定位该物料。</span>
         <RouterLink class="action-link ghost" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看完整台账</RouterLink>
       </div>
     </section>
@@ -258,19 +283,17 @@ onMounted(async () => {
 
       <div class="console-table desktop-only">
         <div class="console-table-scroll workbench-table-scroll">
-          <table class="console-data-table workbench-data-table">
+          <table class="console-data-table dense-table workbench-data-table">
             <colgroup>
-              <col style="width: 30%" />
-              <col style="width: 22%" />
-              <col style="width: 18%" />
-              <col style="width: 14%" />
+              <col style="width: 38%" />
+              <col style="width: 28%" />
               <col style="width: 16%" />
+              <col style="width: 18%" />
             </colgroup>
             <thead>
               <tr>
                 <th>物料</th>
-                <th>规格</th>
-                <th>供应商</th>
+                <th>规格 / 供应商</th>
                 <th>请购人</th>
                 <th class="align-right">待收数量</th>
               </tr>
@@ -288,15 +311,15 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                  <div class="console-cell">
+                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
+                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
+                  </div>
                 </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
-                </td>
-                <td class="console-data-cell">
+                <td class="console-data-cell v-middle">
                   <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
                 </td>
-                <td class="console-data-cell align-right">
+                <td class="console-data-cell align-right v-middle">
                   <span class="console-badge info">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
                 </td>
               </tr>

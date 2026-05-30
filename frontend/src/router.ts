@@ -36,7 +36,7 @@ const router = createRouter({
         eyebrow: '库存台账',
         title: '库存查询与台账',
         description: '查库存、看流水，并快速发起库存作业。',
-        module: '查询与核对',
+        module: '库存查询',
         guide: '先搜索并锁定物料，再查看流水或发起入库、出库。',
         statusLabel: '库存核对',
         shortcuts: [
@@ -53,7 +53,7 @@ const router = createRouter({
         eyebrow: '数据维护',
         title: '库存导入',
         description: '用仓库模板重建当前库存快照。',
-        module: '准备与维护',
+        module: '数据维护',
         guide: '适合重建库存快照，导入后再回到台账检查结果。',
         statusLabel: '库存重建',
         shortcuts: [
@@ -69,7 +69,7 @@ const router = createRouter({
         eyebrow: '数据维护',
         title: '库存导出',
         description: '导出当前库存并延续线下表单流转。',
-        module: '准备与维护',
+        module: '数据维护',
         guide: '导出前建议先在库存台账确认当前筛选对象与库存状态。',
         statusLabel: '库存交接',
         shortcuts: [
@@ -82,10 +82,10 @@ const router = createRouter({
       path: '/inventory-manual',
       component: ManualInventoryPage,
       meta: {
-        eyebrow: '数据维护',
+        eyebrow: '库存作业',
         title: '手动录入库存',
         description: '直接新建或补录散件库存，并自动写入库存流水。',
-        module: '准备与维护',
+        module: '直接作业',
         guide: '先识别库存项，再填写本次入库字段，避免误并入已有库存。',
         statusLabel: '手动补录',
         shortcuts: [
@@ -102,7 +102,7 @@ const router = createRouter({
         eyebrow: '库存作业',
         title: '直接入库',
         description: '登记补货、退货、盘盈等非采购收货入库。',
-        module: '执行作业',
+        module: '直接作业',
         guide: '先选择库存对象，再填写数量、日期和单号。',
         statusLabel: '直接入库',
         shortcuts: [
@@ -119,7 +119,7 @@ const router = createRouter({
         eyebrow: '库存作业',
         title: '直接出库',
         description: '按物料执行领用、发放和其他出库。',
-        module: '执行作业',
+        module: '直接作业',
         guide: '先确认库存余量，再登记本次出库信息。',
         statusLabel: '直接出库',
         shortcuts: [
@@ -135,7 +135,7 @@ const router = createRouter({
         eyebrow: '采购入库',
         title: '采购收货入库',
         description: '从待收货采购明细确认收货并写入库存。',
-        module: '执行作业',
+        module: '采购流程',
         guide: '先确认待收货对象，再复核本次会影响哪些采购明细。',
         statusLabel: '待收货处理',
         shortcuts: [
@@ -151,7 +151,7 @@ const router = createRouter({
         eyebrow: '采购入库',
         title: '采购单导入与同步',
         description: '导入 Excel 或同步飞书采购单，形成待收货列表。',
-        module: '准备与维护',
+        module: '采购流程',
         guide: '先形成待收货池，再进入采购收货做正式入库。',
         statusLabel: '采购准备',
         shortcuts: [

@@ -30,22 +30,27 @@ const navGroups: NavGroup[] = [
     items: [{ to: '/', kicker: 'Overview', label: '工作台' }],
   },
   {
-    title: '查询与核对',
+    title: '库存查询',
     items: [{ to: '/overview', kicker: 'Inspect', label: '库存查询与台账' }],
   },
   {
-    title: '执行作业',
+    title: '采购流程',
     items: [
-      { to: '/purchase-receiving', kicker: 'Purchase', label: '采购收货入库' },
-      { to: '/receipt', kicker: 'Receipt', label: '直接入库' },
-      { to: '/issue', kicker: 'Issue', label: '直接出库' },
+      { to: '/purchase-import', kicker: 'Prepare', label: '采购导入与同步' },
+      { to: '/purchase-receiving', kicker: 'Receive', label: '采购收货入库' },
     ],
   },
   {
-    title: '准备与维护',
+    title: '直接作业',
     items: [
-      { to: '/purchase-import', kicker: 'Prepare', label: '采购导入与同步' },
+      { to: '/receipt', kicker: 'Receipt', label: '直接入库' },
+      { to: '/issue', kicker: 'Issue', label: '直接出库' },
       { to: '/inventory-manual', kicker: 'Manual', label: '手动录入库存' },
+    ],
+  },
+  {
+    title: '数据维护',
+    items: [
       { to: '/inventory-import', kicker: 'Import', label: '库存导入' },
       { to: '/inventory-export', kicker: 'Export', label: '库存导出' },
     ],
@@ -65,36 +70,71 @@ const pageDescription = computed(() => String(route.meta.description ?? ''))
 const pageModule = computed(() => String(route.meta.module ?? pageEyebrow.value))
 const pageGuide = computed(() => String(route.meta.guide ?? ''))
 const pageStatusLabel = computed(() => String(route.meta.statusLabel ?? '执行中'))
-const bannerSummary = computed(() => {
-  const description = pageDescription.value.trim()
+const bannerSummary = computed(() => pageDescription.value.trim())
+const bannerGuideLabel = computed(() => {
   const guide = pageGuide.value.trim()
-
-  if (description && guide && description !== guide) {
-    return `${description} ${guide}`
-  }
-
-  return guide || description
+  return guide !== bannerSummary.value ? guide : ''
 })
 const pageShortcuts = computed<PageShortcut[]>(() => {
   const shortcuts = route.meta.shortcuts
   return Array.isArray(shortcuts) ? (shortcuts as PageShortcut[]) : []
 })
+const sourceContextLabel = computed(() => {
+  const sourceKey = typeof route.query.source === 'string' ? route.query.source : ''
+  return sourceLabelMap[sourceKey] ?? ''
+})
+const itemContextLabel = computed(() => {
+  const itemId = typeof route.query.itemId === 'string' ? route.query.itemId : ''
+  return itemId ? `#${itemId}` : ''
+})
+const purchaseItemContextLabel = computed(() => {
+  const purchaseItemId = typeof route.query.purchaseItemId === 'string' ? route.query.purchaseItemId : ''
+  return purchaseItemId ? `#${purchaseItemId}` : ''
+})
+const purchaseItemScopeCount = computed(() => {
+  const rawValue = typeof route.query.purchaseItemIds === 'string' ? route.query.purchaseItemIds : ''
+  if (!rawValue.trim()) {
+    return 0
+  }
+
+  return [...new Set(rawValue.split(',').map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))].length
+})
+const bannerPulseNote = computed(() => {
+  if (purchaseItemScopeCount.value > 1) {
+    return `当前正在处理本次带入的 ${purchaseItemScopeCount.value} 条采购明细。`
+  }
+
+  if (purchaseItemContextLabel.value) {
+    return `已带入采购明细 ${purchaseItemContextLabel.value}，可直接核对收货。`
+  }
+
+  if (itemContextLabel.value) {
+    return `已带入物料 ${itemContextLabel.value}，可直接查看流水或发起作业。`
+  }
+
+  if (sourceContextLabel.value) {
+    return `当前来源：${sourceContextLabel.value}`
+  }
+
+  return bannerGuideLabel.value || '当前页面可直接开始作业'
+})
 
 const contextChips = computed(() => {
   const chips: Array<{ label: string; value: string }> = [{ label: '模块', value: pageModule.value }]
-  const sourceKey = typeof route.query.source === 'string' ? route.query.source : ''
-  if (sourceKey && sourceLabelMap[sourceKey]) {
-    chips.push({ label: '来源', value: sourceLabelMap[sourceKey] })
+  if (sourceContextLabel.value) {
+    chips.push({ label: '来源', value: sourceContextLabel.value })
   }
 
-  const itemId = typeof route.query.itemId === 'string' ? route.query.itemId : ''
-  if (itemId) {
-    chips.push({ label: '物料', value: `#${itemId}` })
+  if (itemContextLabel.value) {
+    chips.push({ label: '物料', value: itemContextLabel.value })
   }
 
-  const purchaseItemId = typeof route.query.purchaseItemId === 'string' ? route.query.purchaseItemId : ''
-  if (purchaseItemId) {
-    chips.push({ label: '采购明细', value: `#${purchaseItemId}` })
+  if (purchaseItemContextLabel.value) {
+    chips.push({ label: '采购明细', value: purchaseItemContextLabel.value })
+  }
+
+  if (purchaseItemScopeCount.value > 1) {
+    chips.push({ label: '采购范围', value: `${purchaseItemScopeCount.value} 条` })
   }
 
   if (route.path === '/receipt' || route.path === '/issue') {
@@ -118,7 +158,7 @@ watch(
       <div class="brand-panel">
         <p class="eyebrow">WAREHOUSE OPS</p>
         <h1>仓储运营台</h1>
-        <p class="brand-copy">库存清晰、操作稳定、采购收货可追踪</p>
+        <p class="brand-copy">对象先定位，再执行收发和采购入库。</p>
       </div>
 
       <button class="nav-toggle" type="button" :aria-expanded="navExpanded" aria-controls="primary-nav-groups" @click="navExpanded = !navExpanded">
@@ -141,14 +181,6 @@ watch(
           </RouterLink>
         </section>
       </div>
-
-      <div class="sidebar-footer">
-        <article class="sidebar-note">
-          <p>当前焦点</p>
-          <strong>{{ pageTitle }}</strong>
-          <span>{{ pageGuide || pageDescription }}</span>
-        </article>
-      </div>
     </aside>
 
     <div class="page-shell">
@@ -163,6 +195,7 @@ watch(
           <p class="eyebrow">{{ pageEyebrow }}</p>
           <h2>{{ pageTitle }}</h2>
           <p v-if="bannerSummary" class="banner-summary">{{ bannerSummary }}</p>
+          <p v-if="bannerGuideLabel" class="banner-guide">{{ bannerGuideLabel }}</p>
 
           <div v-if="contextChips.length" class="context-chip-row">
             <span v-for="chip in contextChips" :key="`${chip.label}-${chip.value}`" class="context-chip">
@@ -188,7 +221,7 @@ watch(
           <div class="banner-pulse">
             <span>当前阶段</span>
             <strong>{{ pageStatusLabel }}</strong>
-            <small>{{ contextChips.length > 1 ? `已挂载 ${contextChips.length - 1} 条操作上下文` : '当前页面可直接开始作业' }}</small>
+            <small>{{ bannerPulseNote }}</small>
           </div>
         </div>
       </header>
