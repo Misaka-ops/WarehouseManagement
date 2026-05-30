@@ -32,13 +32,6 @@ export function useInventoryWorkspace() {
           selectedItemId.value = null
         }
       }
-
-      if (!selectedItemId.value) {
-        const firstItem = dashboard.value.items[0]
-        if (firstItem) {
-          selectedItemId.value = firstItem.id
-        }
-      }
     } catch {
       ElMessage.error('库存数据加载失败，请确认后端服务已启动。')
     } finally {

@@ -7,7 +7,7 @@ from itertools import groupby
 from pathlib import Path
 
 from openpyxl import load_workbook
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import get_settings
@@ -84,6 +84,115 @@ def get_or_create_location(session: Session, name: str | None) -> Location | Non
 
 def create_schema() -> None:
     Base.metadata.create_all(bind=engine)
+    migrate_inventory_item_unique_constraint()
+
+
+def _inventory_item_unique_indexes(connection) -> list[list[str]]:
+    try:
+        rows = connection.execute(text("PRAGMA index_list('inventory_items')")).fetchall()
+    except Exception:
+        return []
+
+    index_columns: list[list[str]] = []
+    for row in rows:
+        if len(row) < 3 or not row[2]:
+            continue
+        index_name = row[1]
+        column_rows = connection.execute(text(f"PRAGMA index_info('{index_name}')")).fetchall()
+        columns = [column_row[2] for column_row in column_rows if len(column_row) >= 3 and column_row[2]]
+        if columns:
+            index_columns.append(columns)
+    return index_columns
+
+
+def migrate_inventory_item_unique_constraint() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        unique_indexes = _inventory_item_unique_indexes(connection)
+        if not unique_indexes:
+            return
+
+        target_columns = ["material_name", "specification", "unit", "supplier_id", "location_id"]
+        legacy_columns = ["material_name", "specification", "supplier_id", "location_id"]
+
+        has_target_constraint = any(columns == target_columns for columns in unique_indexes)
+        has_legacy_constraint = any(columns == legacy_columns for columns in unique_indexes)
+        if has_target_constraint or not has_legacy_constraint:
+            return
+
+        connection.execute(text("PRAGMA foreign_keys=OFF"))
+        try:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE inventory_items__new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        requester VARCHAR(80),
+                        purchase_category VARCHAR(80),
+                        project_name VARCHAR(120),
+                        material_name VARCHAR(200) NOT NULL,
+                        specification VARCHAR(255),
+                        unit VARCHAR(40),
+                        supplier_id INTEGER REFERENCES suppliers (id),
+                        location_id INTEGER REFERENCES locations (id),
+                        quantity_on_hand NUMERIC(12, 2) NOT NULL,
+                        notes TEXT,
+                        last_receipt_at DATE,
+                        last_issue_at DATE,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        UNIQUE (material_name, specification, unit, supplier_id, location_id)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO inventory_items__new (
+                        id,
+                        requester,
+                        purchase_category,
+                        project_name,
+                        material_name,
+                        specification,
+                        unit,
+                        supplier_id,
+                        location_id,
+                        quantity_on_hand,
+                        notes,
+                        last_receipt_at,
+                        last_issue_at,
+                        created_at,
+                        updated_at
+                    )
+                    SELECT
+                        id,
+                        requester,
+                        purchase_category,
+                        project_name,
+                        material_name,
+                        specification,
+                        unit,
+                        supplier_id,
+                        location_id,
+                        quantity_on_hand,
+                        notes,
+                        last_receipt_at,
+                        last_issue_at,
+                        created_at,
+                        updated_at
+                    FROM inventory_items
+                    """
+                )
+            )
+            connection.execute(text("DROP TABLE inventory_items"))
+            connection.execute(text("ALTER TABLE inventory_items__new RENAME TO inventory_items"))
+            connection.execute(text("CREATE INDEX ix_inventory_items_material_name ON inventory_items (material_name)"))
+        finally:
+            connection.execute(text("PRAGMA foreign_keys=ON"))
 
 
 def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO) -> tuple[int, int]:

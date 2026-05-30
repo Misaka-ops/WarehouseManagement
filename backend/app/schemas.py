@@ -88,6 +88,8 @@ class InventoryManualUpsertRequest(BaseModel):
     occurred_on: date
     operator_name: str | None = None
     reference_code: str | None = None
+    item_notes: str | None = None
+    transaction_notes: str | None = None
     notes: str | None = None
 
 

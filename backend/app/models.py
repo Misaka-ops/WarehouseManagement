@@ -50,7 +50,7 @@ class Location(TimestampMixin, Base):
 
 class InventoryItem(TimestampMixin, Base):
     __tablename__ = "inventory_items"
-    __table_args__ = (UniqueConstraint("material_name", "specification", "supplier_id", "location_id"),)
+    __table_args__ = (UniqueConstraint("material_name", "specification", "unit", "supplier_id", "location_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     requester: Mapped[str | None] = mapped_column(String(80))

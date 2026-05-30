@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import axios from 'axios'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
@@ -13,6 +14,7 @@ const props = defineProps<{
   mode: TransactionMode
 }>()
 
+const route = useRoute()
 const { historyLoading, inventoryItems, itemTransactions, loading, loadDashboard, loadTransactions, selectItem, selectedItem, selectedItemId } =
   useInventoryWorkspace()
 
@@ -31,22 +33,47 @@ const form = ref<InventoryTransactionPayload>({
 })
 
 const isReceipt = computed(() => props.mode === 'receipt')
-const pageLabel = computed(() => (isReceipt.value ? '入库登记' : '出库登记'))
+const pageLabel = computed(() => (isReceipt.value ? '直接入库' : '直接出库'))
 const pageDescription = computed(() =>
   isReceipt.value
-    ? '登记入库信息。'
-    : '登记出库信息。'
+    ? '适用于补货、退货、盘盈等非采购收货场景。'
+    : '适用于领用、发放和其他直接出库场景。',
 )
 const submitLabel = computed(() => {
   if (submitting.value) {
     return '提交中...'
   }
-  return isReceipt.value ? '确认入库' : '确认出库'
+  return isReceipt.value ? '确认直接入库' : '确认直接出库'
 })
 const referencePrefix = computed(() => (isReceipt.value ? 'RK-' : 'CK-'))
-const alternateRoute = computed(() => (isReceipt.value ? '/issue' : '/receipt'))
-const alternateLabel = computed(() => (isReceipt.value ? '切换到出库页面' : '切换到入库页面'))
+const currentSource = computed(() => (typeof route.query.source === 'string' ? route.query.source : 'overview'))
+const receiptRoute = computed(() => ({
+  path: '/receipt',
+  query: selectedItemId.value ? { itemId: selectedItemId.value, source: currentSource.value } : { source: currentSource.value },
+}))
+const issueRoute = computed(() => ({
+  path: '/issue',
+  query: selectedItemId.value ? { itemId: selectedItemId.value, source: currentSource.value } : { source: currentSource.value },
+}))
 const selectedStockQuantity = computed(() => Number(selectedItem.value?.quantity_on_hand ?? 0))
+const projectedStockQuantity = computed(() => {
+  const current = selectedStockQuantity.value
+  const delta = Number(form.value.quantity || 0)
+  return Number((isReceipt.value ? current + delta : current - delta).toFixed(2))
+})
+const quantityError = computed(() => {
+  const quantity = Number(form.value.quantity || 0)
+  if (quantity <= 0) {
+    return '数量必须大于 0。'
+  }
+
+  if (!isReceipt.value && selectedItem.value && quantity > selectedStockQuantity.value) {
+    return `出库数量不能超过当前库存 ${selectedStockQuantity.value}。`
+  }
+
+  return ''
+})
+const occurredOnError = computed(() => (form.value.occurred_on ? '' : '请选择业务日期。'))
 const issueBlockedReason = computed(() => {
   if (isReceipt.value || !selectedItem.value) {
     return ''
@@ -56,14 +83,11 @@ const issueBlockedReason = computed(() => {
     return '当前物料库存为 0，不能执行出库。'
   }
 
-  const requestedQuantity = Number(form.value.quantity || 0)
-  if (requestedQuantity > selectedStockQuantity.value) {
-    return `出库数量不能超过当前库存 ${selectedStockQuantity.value}。`
-  }
-
-  return ''
+  return quantityError.value
 })
-const submitDisabled = computed(() => submitting.value || !selectedItem.value || Boolean(issueBlockedReason.value))
+const submitDisabled = computed(
+  () => submitting.value || !selectedItem.value || Boolean(quantityError.value) || Boolean(occurredOnError.value),
+)
 
 const filteredItems = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
@@ -101,14 +125,31 @@ function chooseInventoryItem(item: InventoryItem) {
   form.value.item_id = item.id
 }
 
+function syncRouteSelection() {
+  const queryItemId = Number(route.query.itemId)
+  if (!Number.isFinite(queryItemId) || queryItemId <= 0) {
+    return
+  }
+
+  const matchedItem = inventoryItems.value.find((item) => item.id === queryItemId)
+  if (matchedItem) {
+    chooseInventoryItem(matchedItem)
+  }
+}
+
 async function submitTransaction() {
   if (!selectedItemId.value) {
     ElMessage.warning('请先选择一个库存项目。')
     return
   }
 
-  if (issueBlockedReason.value) {
-    ElMessage.warning(issueBlockedReason.value)
+  if (quantityError.value) {
+    ElMessage.warning(quantityError.value)
+    return
+  }
+
+  if (occurredOnError.value) {
+    ElMessage.warning(occurredOnError.value)
     return
   }
 
@@ -118,15 +159,16 @@ async function submitTransaction() {
   try {
     if (isReceipt.value) {
       await postReceipt(form.value)
-      ElMessage.success('入库已登记。')
+      ElMessage.success('直接入库已登记。')
     } else {
       await postIssue(form.value)
-      ElMessage.success('出库已登记。')
+      ElMessage.success('直接出库已登记。')
     }
 
     await loadDashboard({ quiet: true })
     await loadTransactions(selectedItemId.value)
     resetActionFields()
+    syncRouteSelection()
   } catch (error) {
     const message = axios.isAxiosError(error)
       ? (error.response?.data?.detail as string | undefined) || error.message || '提交失败'
@@ -139,28 +181,30 @@ async function submitTransaction() {
   }
 }
 
+watch(
+  () => route.query.itemId,
+  () => {
+    syncRouteSelection()
+  },
+)
+
+watch(inventoryItems, () => {
+  syncRouteSelection()
+})
+
 onMounted(async () => {
   form.value.reference_code = referencePrefix.value
   await loadDashboard()
-  if (!isReceipt.value) {
-    const firstAvailableItem = inventoryItems.value.find((item) => Number(item.quantity_on_hand) > 0)
-    if (firstAvailableItem) {
-      chooseInventoryItem(firstAvailableItem)
-    }
-  }
-
-  if (selectedItem.value) {
-    form.value.item_id = selectedItem.value.id
-  }
+  syncRouteSelection()
 })
 </script>
 
 <template>
-  <div class="content-grid">
+  <div class="content-grid operation-layout">
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">物料选择</p>
+          <p class="section-kicker">作业对象</p>
           <h3>{{ pageLabel }}</h3>
         </div>
         <span class="section-meta">{{ filteredItems.length }} / {{ inventoryItems.length }}</span>
@@ -168,18 +212,33 @@ onMounted(async () => {
 
       <p class="section-copy tight">{{ pageDescription }}</p>
 
-      <div class="toolbar-grid">
+      <div class="status-strip workflow-strip">
+        <div>
+          <span>步骤 1</span>
+          <strong>选择库存对象</strong>
+        </div>
+        <div>
+          <span>步骤 2</span>
+          <strong>{{ isReceipt ? '填写入库数量' : '填写出库数量' }}</strong>
+        </div>
+        <div>
+          <span>步骤 3</span>
+          <strong>提交后立即回看流水</strong>
+        </div>
+      </div>
+
+      <div class="toolbar-grid compact-toolbar">
         <label class="field">
-          <span>搜索</span>
+          <span>搜索物料</span>
           <input v-model="searchKeyword" type="text" placeholder="按物料、规格、供应商、区位搜索" />
         </label>
 
         <button class="soft-button" :class="{ active: lowStockOnly }" type="button" @click="lowStockOnly = !lowStockOnly">
-          {{ lowStockOnly ? '只看低库存中' : '切到低库存' }}
+          {{ lowStockOnly ? '当前只看低库存' : '只看低库存' }}
         </button>
       </div>
 
-      <div class="console-table">
+      <div class="console-table desktop-only">
         <div class="console-table-scroll">
           <div class="console-table-header inventory-pick-table-grid">
             <span class="console-header-cell">物料</span>
@@ -188,8 +247,8 @@ onMounted(async () => {
             <span class="console-header-cell">供应商</span>
             <span class="console-header-cell">区位</span>
             <span class="console-header-cell">项目</span>
-            <span class="console-header-cell">库存</span>
-            <span class="console-header-cell">最近入库</span>
+            <span class="console-header-cell align-right">库存</span>
+            <span class="console-header-cell align-right">最近入库</span>
             <span class="console-header-cell">操作</span>
           </div>
 
@@ -197,8 +256,12 @@ onMounted(async () => {
             v-for="item in filteredItems"
             :key="item.id"
             class="console-table-row inventory-pick-table-grid interactive"
+            role="button"
+            tabindex="0"
             :class="{ active: item.id === selectedItemId }"
             @click="chooseInventoryItem(item)"
+            @keydown.enter.prevent="chooseInventoryItem(item)"
+            @keydown.space.prevent="chooseInventoryItem(item)"
           >
             <div class="console-cell">
               <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
@@ -209,12 +272,14 @@ onMounted(async () => {
             <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填'">{{ item.location_name || '未填' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填'">{{ item.project_name || '未填' }}</div>
-            <div class="console-cell">
+            <div class="console-cell align-right">
               <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
                 {{ item.quantity_on_hand }} {{ item.unit || '件' }}
               </span>
             </div>
-            <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
+            <div class="console-cell muted console-nowrap align-right" :title="item.last_receipt_at || '未记录'">
+              {{ item.last_receipt_at || '未记录' }}
+            </div>
             <div class="console-row-actions" @click.stop>
               <button class="console-action primary" type="button" @click="chooseInventoryItem(item)">选择</button>
             </div>
@@ -224,33 +289,80 @@ onMounted(async () => {
         <div v-if="loading" class="console-empty">正在加载库存数据...</div>
         <div v-else-if="!filteredItems.length" class="console-empty">没有匹配到库存项目。</div>
       </div>
+
+      <div class="mobile-only mobile-flow-stack">
+        <div class="stack-list">
+          <article
+            v-for="item in filteredItems"
+            :key="item.id"
+            class="data-row clickable mobile-task-card"
+            role="button"
+            tabindex="0"
+            :class="{ active: item.id === selectedItemId }"
+            @click="chooseInventoryItem(item)"
+            @keydown.enter.prevent="chooseInventoryItem(item)"
+            @keydown.space.prevent="chooseInventoryItem(item)"
+          >
+            <div class="data-row-main">
+              <div class="data-row-head">
+                <strong>{{ item.material_name }}</strong>
+                <span :class="['data-row-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
+                  {{ item.quantity_on_hand }} {{ item.unit || '件' }}
+                </span>
+              </div>
+              <div class="data-row-meta">
+                <span>规格：{{ item.specification || '未填' }}</span>
+                <span>供应商：{{ item.supplier_name || '未填' }}</span>
+                <span>区位：{{ item.location_name || '未填' }}</span>
+                <span>项目：{{ item.project_name || '未填' }}</span>
+                <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
+              </div>
+            </div>
+
+            <div class="data-row-actions">
+              <button class="action-link" type="button" @click.stop="chooseInventoryItem(item)">选择</button>
+            </div>
+          </article>
+
+          <div v-if="loading" class="empty-state">正在加载库存数据...</div>
+          <div v-else-if="!filteredItems.length" class="empty-state">没有匹配到库存项目。</div>
+        </div>
+      </div>
     </section>
 
     <div class="page-stack">
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">执行表单</p>
-            <h3>{{ pageLabel }}</h3>
+            <p class="section-kicker">本次作业</p>
+            <h3>{{ selectedItem?.material_name || '先选择一个库存项目' }}</h3>
           </div>
-          <span class="section-meta">表单</span>
+          <span class="section-meta">{{ pageLabel }}</span>
+        </div>
+
+        <div class="segment-switch">
+          <RouterLink class="segment-chip" :class="{ active: isReceipt }" :to="receiptRoute">直接入库</RouterLink>
+          <RouterLink class="segment-chip" :class="{ active: !isReceipt }" :to="issueRoute">直接出库</RouterLink>
         </div>
 
         <form class="form-stack" @submit.prevent="submitTransaction">
-          <div class="receipt-summary">
+          <div class="receipt-summary emphasis-summary">
             <p>物料：{{ selectedItem?.material_name || '未选择' }}</p>
             <p>规格：{{ selectedItem?.specification || '未填规格' }}</p>
-            <p>单位：{{ selectedItem?.unit || '件' }}</p>
+            <p>区位：{{ selectedItem?.location_name || '未填区位' }}</p>
             <p>当前库存：{{ selectedItem?.quantity_on_hand || '--' }} {{ selectedItem?.unit || '件' }}</p>
+            <p>本次变动后：{{ selectedItem ? projectedStockQuantity : '--' }} {{ selectedItem?.unit || '件' }}</p>
           </div>
 
           <label class="field">
             <span>数量</span>
             <div class="quantity-editor">
               <button class="qty-button" type="button" @click="nudgeQuantity(-1)">-1</button>
-              <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" />
+              <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" inputmode="decimal" />
               <button class="qty-button" type="button" @click="nudgeQuantity(1)">+1</button>
             </div>
+            <small v-if="quantityError" class="field-hint danger">{{ quantityError }}</small>
+            <small v-else class="field-hint">{{ isReceipt ? '数量会累加到当前库存。' : '提交后会从当前库存中扣减。' }}</small>
           </label>
 
           <div class="chip-row">
@@ -261,19 +373,21 @@ onMounted(async () => {
 
           <div class="toolbar-grid dual">
             <label class="field">
-              <span>日期</span>
+              <span>业务日期</span>
               <input v-model="form.occurred_on" type="date" />
+              <small v-if="occurredOnError" class="field-hint danger">{{ occurredOnError }}</small>
             </label>
 
             <label class="field">
               <span>操作人</span>
               <input v-model="form.operator_name" type="text" placeholder="仓管员" />
+              <small class="field-hint">会保留本次会话的填写习惯。</small>
             </label>
           </div>
 
           <label class="field">
             <span>单号 / 引用</span>
-            <input v-model="form.reference_code" type="text" placeholder="例如 RK-20260517-01" />
+            <input v-model="form.reference_code" type="text" :placeholder="`例如 ${referencePrefix}20260530-01`" />
           </label>
 
           <label class="field">
@@ -292,33 +406,22 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">页面切换</p>
-            <h3>{{ selectedItem?.material_name || '请选择一个库存项目' }}</h3>
+            <p class="section-kicker">辅助核对</p>
+            <h3>{{ selectedItem ? '最近流水' : '还没有选择物料' }}</h3>
           </div>
-          <span class="section-meta">{{ pageLabel }}</span>
+          <span class="section-meta">{{ selectedItem ? `物料 #${selectedItem.id}` : '请先选择对象' }}</span>
         </div>
 
         <div class="link-row">
-          <RouterLink class="action-link secondary" :to="alternateRoute">{{ alternateLabel }}</RouterLink>
-          <RouterLink class="action-link ghost" to="/overview">返回仓库总览</RouterLink>
-        </div>
-      </section>
-
-      <section class="page-section">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">最近流水</p>
-            <h3>辅助核对</h3>
-          </div>
-          <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
+          <RouterLink class="action-link ghost" to="/overview">返回库存台账</RouterLink>
         </div>
 
-        <div class="console-table">
+        <div class="console-table desktop-only">
           <div class="console-table-scroll">
             <div class="console-table-header history-table-grid">
               <span class="console-header-cell">类型</span>
-              <span class="console-header-cell">时间</span>
-              <span class="console-header-cell">数量</span>
+              <span class="console-header-cell align-right">时间</span>
+              <span class="console-header-cell align-right">数量</span>
               <span class="console-header-cell">操作人</span>
               <span class="console-header-cell">单号</span>
               <span class="console-header-cell">备注</span>
@@ -330,8 +433,8 @@ onMounted(async () => {
                   {{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}
                 </span>
               </div>
-              <div class="console-cell muted console-nowrap" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
-              <div class="console-cell">
+              <div class="console-cell muted console-nowrap align-right" :title="tx.occurred_on">{{ tx.occurred_on }}</div>
+              <div class="console-cell align-right">
                 <strong>{{ tx.quantity }} {{ selectedItem?.unit || '件' }}</strong>
               </div>
               <div class="console-cell muted console-clamp-2" :title="tx.operator_name || '未填'">{{ tx.operator_name || '未填' }}</div>
@@ -341,7 +444,33 @@ onMounted(async () => {
           </div>
 
           <div v-if="historyLoading" class="console-empty">正在加载流水...</div>
+          <div v-else-if="!selectedItem" class="console-empty">请先从左侧列表选择一个库存项目。</div>
           <div v-else-if="!itemTransactions.length" class="console-empty">当前物料还没有流水记录。</div>
+        </div>
+
+        <div class="mobile-only mobile-flow-stack">
+          <div class="stack-list">
+            <article v-for="tx in itemTransactions" :key="tx.id" class="data-row mobile-task-card history-mobile-card">
+              <div class="data-row-main">
+                <div class="data-row-head">
+                  <span :class="['data-row-badge', tx.transaction_type === 'receipt' ? 'ok' : 'warn']">
+                    {{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}
+                  </span>
+                  <strong>{{ tx.quantity }} {{ selectedItem?.unit || '件' }}</strong>
+                </div>
+                <div class="data-row-meta">
+                  <span>时间：{{ tx.occurred_on }}</span>
+                  <span>操作人：{{ tx.operator_name || '未填' }}</span>
+                  <span>单号：{{ tx.reference_code || '未填' }}</span>
+                  <span>备注：{{ tx.notes || '无' }}</span>
+                </div>
+              </div>
+            </article>
+
+            <div v-if="historyLoading" class="empty-state">正在加载流水...</div>
+            <div v-else-if="!selectedItem" class="empty-state">请先从左侧列表选择一个库存项目。</div>
+            <div v-else-if="!itemTransactions.length" class="empty-state">当前物料还没有流水记录。</div>
+          </div>
         </div>
       </section>
     </div>

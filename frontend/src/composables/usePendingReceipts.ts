@@ -13,8 +13,8 @@ export function usePendingReceipts() {
     () => pendingReceipts.value.find((item) => item.purchase_item_id === selectedPendingReceiptId.value) ?? null,
   )
 
-  function choosePendingReceipt(item: PurchasePendingReceipt) {
-    selectedPendingReceiptId.value = item.purchase_item_id
+  function choosePendingReceipt(item: PurchasePendingReceipt | null) {
+    selectedPendingReceiptId.value = item?.purchase_item_id ?? null
   }
 
   async function loadPendingReceipts() {
@@ -27,10 +27,6 @@ export function usePendingReceipts() {
         if (!existing) {
           selectedPendingReceiptId.value = null
         }
-      }
-
-      if (!selectedPendingReceiptId.value && pendingReceipts.value[0]) {
-        selectedPendingReceiptId.value = pendingReceipts.value[0].purchase_item_id
       }
     } catch {
       pendingReceipts.value = []

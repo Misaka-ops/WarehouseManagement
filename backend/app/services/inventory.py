@@ -58,12 +58,14 @@ def _find_inventory_item(
     *,
     material_name: str,
     specification: str | None,
+    unit: str | None,
     supplier_id: int | None,
     location_id: int | None,
 ) -> InventoryItem | None:
     conditions = [
         InventoryItem.material_name == material_name,
         InventoryItem.specification == specification,
+        InventoryItem.unit == unit,
     ]
     if supplier_id is None:
         conditions.append(InventoryItem.supplier_id.is_(None))
@@ -133,7 +135,9 @@ def upsert_inventory_item(
     occurred_on: date,
     operator_name: str | None,
     reference_code: str | None,
-    notes: str | None,
+    item_notes: str | None = None,
+    transaction_notes: str | None = None,
+    notes: str | None = None,
 ) -> tuple[InventoryItem, InventoryTransaction, bool]:
     normalized_material_name = normalize_text(material_name)
     if not normalized_material_name:
@@ -146,7 +150,8 @@ def upsert_inventory_item(
     normalized_project_name = normalize_text(project_name)
     normalized_supplier_name = normalize_text(supplier_name)
     normalized_location_name = normalize_text(location_name)
-    normalized_notes = normalize_text(notes)
+    normalized_item_notes = normalize_text(item_notes if item_notes is not None else notes)
+    normalized_transaction_notes = normalize_text(transaction_notes if transaction_notes is not None else notes)
     normalized_operator_name = normalize_text(operator_name)
     normalized_reference_code = normalize_text(reference_code)
 
@@ -157,6 +162,7 @@ def upsert_inventory_item(
         session,
         material_name=normalized_material_name,
         specification=normalized_specification,
+        unit=normalized_unit,
         supplier_id=supplier.id if supplier else None,
         location_id=location.id if location else None,
     )
@@ -173,7 +179,7 @@ def upsert_inventory_item(
             supplier=supplier,
             location=location,
             quantity_on_hand=Decimal("0"),
-            notes=normalized_notes,
+            notes=normalized_item_notes,
         )
         session.add(item)
         session.flush()
@@ -186,7 +192,7 @@ def upsert_inventory_item(
         item.unit = normalized_unit
         item.supplier = supplier
         item.location = location
-        item.notes = normalized_notes
+        item.notes = normalized_item_notes
 
     item.quantity_on_hand = Decimal(item.quantity_on_hand) + quantity
     item.last_receipt_at = occurred_on
@@ -198,7 +204,7 @@ def upsert_inventory_item(
         occurred_on=occurred_on,
         operator_name=normalized_operator_name,
         reference_code=normalized_reference_code,
-        notes=normalized_notes or "手动录入库存",
+        notes=normalized_transaction_notes or "手动录入库存",
     )
     session.add(transaction)
     session.commit()

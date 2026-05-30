@@ -72,6 +72,8 @@ export interface InventoryManualUpsertPayload {
   occurred_on: string
   operator_name?: string | null
   reference_code?: string | null
+  item_notes?: string | null
+  transaction_notes?: string | null
   notes?: string | null
 }
 

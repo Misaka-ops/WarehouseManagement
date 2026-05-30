@@ -24,8 +24,9 @@ const form = ref<InventoryManualUpsertPayload>({
   quantity: 1,
   occurred_on: new Date().toISOString().slice(0, 10),
   operator_name: '',
-  reference_code: '',
-  notes: '',
+  reference_code: 'MAN-',
+  item_notes: '',
+  transaction_notes: '',
 })
 
 function normalizeText(value?: string | null) {
@@ -36,8 +37,8 @@ function normalizeText(value?: string | null) {
 function resetTransactionFields() {
   form.value.quantity = 1
   form.value.occurred_on = new Date().toISOString().slice(0, 10)
-  form.value.operator_name = ''
-  form.value.reference_code = ''
+  form.value.reference_code = 'MAN-'
+  form.value.transaction_notes = ''
 }
 
 function fillFormFromItem(item: InventoryItem) {
@@ -49,8 +50,16 @@ function fillFormFromItem(item: InventoryItem) {
   form.value.unit = item.unit ?? ''
   form.value.supplier_name = item.supplier_name ?? ''
   form.value.location_name = item.location_name ?? ''
-  form.value.notes = item.notes ?? ''
-  resetTransactionFields()
+  form.value.item_notes = item.notes ?? ''
+  if (!(form.value.reference_code ?? '').trim()) {
+    form.value.reference_code = 'MAN-'
+  }
+  if (!form.value.occurred_on) {
+    form.value.occurred_on = new Date().toISOString().slice(0, 10)
+  }
+  if (!(Number(form.value.quantity) > 0)) {
+    form.value.quantity = 1
+  }
   selectedCandidateId.value = item.id
 }
 
@@ -78,8 +87,13 @@ function matchesKeyword(item: InventoryItem, keywords: string[]) {
 
 const normalizedMaterial = computed(() => form.value.material_name.trim())
 const normalizedSpecification = computed(() => normalizeText(form.value.specification))
+const normalizedUnit = computed(() => normalizeText(form.value.unit))
 const normalizedSupplier = computed(() => normalizeText(form.value.supplier_name))
 const normalizedLocation = computed(() => normalizeText(form.value.location_name))
+const normalizedRequester = computed(() => normalizeText(form.value.requester))
+const normalizedCategory = computed(() => normalizeText(form.value.purchase_category))
+const normalizedProject = computed(() => normalizeText(form.value.project_name))
+const quantityError = computed(() => (Number(form.value.quantity || 0) > 0 ? '' : '数量必须大于 0。'))
 
 const exactMatch = computed(() => {
   if (!normalizedMaterial.value) {
@@ -91,6 +105,7 @@ const exactMatch = computed(() => {
       (item) =>
         item.material_name === normalizedMaterial.value &&
         normalizeText(item.specification) === normalizedSpecification.value &&
+        normalizeText(item.unit) === normalizedUnit.value &&
         normalizeText(item.supplier_name) === normalizedSupplier.value &&
         normalizeText(item.location_name) === normalizedLocation.value,
     ) ?? null
@@ -101,6 +116,7 @@ const relatedItems = computed(() => {
   const keywords = [
     normalizedMaterial.value,
     normalizedSpecification.value,
+    normalizedUnit.value,
     normalizedSupplier.value,
     normalizedLocation.value,
   ]
@@ -137,8 +153,8 @@ async function submitForm() {
     return
   }
 
-  if (Number(form.value.quantity || 0) <= 0) {
-    ElMessage.warning('数量必须大于 0。')
+  if (quantityError.value) {
+    ElMessage.warning(quantityError.value)
     return
   }
 
@@ -146,27 +162,25 @@ async function submitForm() {
 
   try {
     const response = await upsertInventoryItem({
-      requester: normalizeText(form.value.requester),
-      purchase_category: normalizeText(form.value.purchase_category),
-      project_name: normalizeText(form.value.project_name),
+      requester: normalizedRequester.value,
+      purchase_category: normalizedCategory.value,
+      project_name: normalizedProject.value,
       material_name: materialName,
       specification: normalizedSpecification.value,
-      unit: normalizeText(form.value.unit),
+      unit: normalizedUnit.value,
       supplier_name: normalizedSupplier.value,
       location_name: normalizedLocation.value,
       quantity: Number(form.value.quantity),
       occurred_on: form.value.occurred_on,
       operator_name: normalizeText(form.value.operator_name),
       reference_code: normalizeText(form.value.reference_code),
-      notes: normalizeText(form.value.notes),
+      item_notes: normalizeText(form.value.item_notes),
+      transaction_notes: normalizeText(form.value.transaction_notes),
     })
 
     await loadDashboard({ quiet: true })
-    form.value.quantity = 1
-    form.value.occurred_on = new Date().toISOString().slice(0, 10)
-    form.value.operator_name = ''
-    form.value.reference_code = ''
     selectedCandidateId.value = response.item.id
+    resetTransactionFields()
 
     ElMessage.success(response.created_item ? '已新建库存项并完成手动入库。' : '已补充到现有库存。')
   } catch (error) {
@@ -191,84 +205,143 @@ onMounted(async () => {
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">维护</p>
-          <h3>手动录入 / 补库存</h3>
+          <p class="section-kicker">手动入库</p>
+          <h3>先识别库存项，再填写本次入库信息</h3>
         </div>
-        <span class="section-meta">可新建，也可按相同物料自动累加</span>
+        <span class="section-meta">适合散件、盘点修正和临时补料</span>
       </div>
 
-      <p class="section-copy tight">适合散件、临时补料、现场盘点后补录等场景。提交后会自动写入库存流水。</p>
+      <p class="section-copy tight">
+        系统会用“物料名称、规格型号、单位、供应商、区位”来判断是否补到现有库存。库存项说明不会参与匹配；采购类别、项目和申请人只用于业务归属。
+      </p>
+
+      <div class="status-strip workflow-strip">
+        <div>
+          <span>步骤 1</span>
+          <strong>锁定库存项</strong>
+        </div>
+        <div>
+          <span>步骤 2</span>
+          <strong>填写本次入库</strong>
+        </div>
+        <div>
+          <span>步骤 3</span>
+          <strong>确认是否新建库存</strong>
+        </div>
+      </div>
 
       <form class="form-stack manual-form" @submit.prevent="submitForm">
-        <div class="manual-form-grid">
-          <label class="field">
-            <span>物料名称 *</span>
-            <input v-model.trim="form.material_name" type="text" placeholder="例如 螺丝 M4 x 12" />
-          </label>
+        <section class="subsection-panel">
+          <div class="subsection-heading">
+            <p>识别库存项</p>
+            <span>决定是否补到已有库存</span>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>物料名称 *</span>
+              <input v-model.trim="form.material_name" type="text" placeholder="例如 螺丝 M4 x 12" />
+            </label>
+
+            <label class="field">
+              <span>规格型号</span>
+              <input v-model.trim="form.specification" type="text" placeholder="例如 304 不锈钢" />
+            </label>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>单位</span>
+              <input v-model.trim="form.unit" type="text" placeholder="例如 件、米、包" />
+            </label>
+
+            <label class="field">
+              <span>区位</span>
+              <input v-model.trim="form.location_name" type="text" placeholder="例如 A-01-03" />
+            </label>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>供应商</span>
+              <input v-model.trim="form.supplier_name" type="text" placeholder="例如 深圳某某五金" />
+            </label>
+
+            <label class="field">
+              <span>库存项说明</span>
+              <input v-model.trim="form.item_notes" type="text" placeholder="补充长期保留的批次、来源或识别说明" />
+              <small class="field-hint">保存到库存主档，不参与合并匹配。</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="subsection-panel">
+          <div class="subsection-heading">
+            <p>业务归属</p>
+            <span>不参与库存合并，只用于后续追踪</span>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>采购类别</span>
+              <input v-model.trim="form.purchase_category" type="text" placeholder="例如 设备维修、办公耗材" />
+            </label>
+
+            <label class="field">
+              <span>项目名称</span>
+              <input v-model.trim="form.project_name" type="text" placeholder="例如 XX 项目" />
+            </label>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>申请 / 领用人</span>
+              <input v-model.trim="form.requester" type="text" placeholder="例如 张三" />
+            </label>
+          </div>
+        </section>
+
+        <section class="subsection-panel">
+          <div class="subsection-heading">
+            <p>本次入库</p>
+            <span>本次动作会写入库存流水</span>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>数量 *</span>
+              <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" inputmode="decimal" />
+              <small v-if="quantityError" class="field-hint danger">{{ quantityError }}</small>
+            </label>
+
+            <label class="field">
+              <span>入库日期</span>
+              <input v-model="form.occurred_on" type="date" />
+            </label>
+          </div>
+
+          <div class="manual-form-grid">
+            <label class="field">
+              <span>操作人</span>
+              <input v-model.trim="form.operator_name" type="text" placeholder="例如 仓管员" />
+            </label>
+
+            <label class="field">
+              <span>单号 / 引用</span>
+              <input v-model.trim="form.reference_code" type="text" placeholder="例如 MAN-20260530-01" />
+            </label>
+          </div>
 
           <label class="field">
-            <span>规格型号</span>
-            <input v-model.trim="form.specification" type="text" placeholder="例如 304 不锈钢" />
+            <span>本次入库说明</span>
+            <textarea
+              v-model.trim="form.transaction_notes"
+              rows="4"
+              placeholder="例如 盘点补录、拆零补料、修正来源说明"
+            ></textarea>
+            <small class="field-hint">只写入本次入库流水，不会覆盖库存项说明。</small>
           </label>
-        </div>
-
-        <div class="manual-form-grid">
-          <label class="field">
-            <span>数量 *</span>
-            <input v-model.number="form.quantity" min="0.01" step="0.01" type="number" />
-          </label>
-
-          <label class="field">
-            <span>单位</span>
-            <input v-model.trim="form.unit" type="text" placeholder="例如 件、米、包" />
-          </label>
-        </div>
-
-        <div class="manual-form-grid">
-          <label class="field">
-            <span>供应商</span>
-            <input v-model.trim="form.supplier_name" type="text" placeholder="例如 深圳某某五金" />
-          </label>
-
-          <label class="field">
-            <span>区位</span>
-            <input v-model.trim="form.location_name" type="text" placeholder="例如 A-01-03" />
-          </label>
-        </div>
-
-        <div class="manual-form-grid">
-          <label class="field">
-            <span>领用/采购人</span>
-            <input v-model.trim="form.requester" type="text" placeholder="例如 张三" />
-          </label>
-
-          <label class="field">
-            <span>采购类别 / 项目</span>
-            <input v-model.trim="form.project_name" type="text" placeholder="例如 设备维修 / XX项目" />
-          </label>
-        </div>
-
-        <div class="manual-form-grid">
-          <label class="field">
-            <span>入库日期</span>
-            <input v-model="form.occurred_on" type="date" />
-          </label>
-
-          <label class="field">
-            <span>操作人</span>
-            <input v-model.trim="form.operator_name" type="text" placeholder="例如 仓管员" />
-          </label>
-        </div>
-
-        <label class="field">
-          <span>单号 / 引用</span>
-          <input v-model.trim="form.reference_code" type="text" placeholder="例如 MAN-20260530-01" />
-        </label>
-
-        <label class="field">
-          <span>备注</span>
-          <textarea v-model.trim="form.notes" rows="4" placeholder="补充本次手动录入原因、来源、批次等"></textarea>
-        </label>
+        </section>
 
         <button class="primary-button" type="submit" :disabled="submitting">
           {{ submitting ? '提交中...' : '确认手动录入' }}
@@ -280,23 +353,29 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">预览</p>
-            <h3>匹配结果</h3>
+            <p class="section-kicker">匹配预览</p>
+            <h3>先确认会不会合并到已有库存</h3>
           </div>
-          <span class="section-meta">{{ exactMatch ? `库存 #${exactMatch.id}` : '新建' }}</span>
+          <span class="section-meta">{{ exactMatch ? `库存 #${exactMatch.id}` : '将新建' }}</span>
         </div>
 
-        <div class="receipt-summary">
+        <div class="receipt-summary emphasis-summary">
           <p>{{ previewStatus }}</p>
           <p>当前库存：{{ exactMatch?.quantity_on_hand ?? 0 }} {{ exactMatch?.unit || form.unit || '件' }}</p>
           <p>提交后预计：{{ projectedQuantity }} {{ exactMatch?.unit || form.unit || '件' }}</p>
           <p>区位：{{ exactMatch?.location_name || normalizedLocation || '未填写' }}</p>
+          <p>本次说明：{{ form.transaction_notes?.trim() || '未填写，系统将使用默认流水说明' }}</p>
+          <p>系统匹配字段：物料名称、规格型号、单位、供应商、区位</p>
         </div>
 
         <div class="status-strip manual-status">
           <div>
             <span>物料</span>
             <strong>{{ normalizedMaterial || '--' }}</strong>
+          </div>
+          <div>
+            <span>单位</span>
+            <strong>{{ normalizedUnit || '--' }}</strong>
           </div>
           <div>
             <span>供应商</span>
@@ -312,8 +391,8 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">候选</p>
-            <h3>可套用库存项</h3>
+            <p class="section-kicker">候选库存</p>
+            <h3>可直接套用已有库存项</h3>
           </div>
           <span class="section-meta">{{ relatedItems.length }} 条</span>
         </div>
@@ -323,9 +402,9 @@ onMounted(async () => {
             <div class="console-table-header summary-table-grid">
               <span class="console-header-cell">物料</span>
               <span class="console-header-cell">规格</span>
+              <span class="console-header-cell">单位</span>
               <span class="console-header-cell">区位</span>
-              <span class="console-header-cell">供应商</span>
-              <span class="console-header-cell">库存</span>
+              <span class="console-header-cell align-right">库存</span>
               <span class="console-header-cell">操作</span>
             </div>
 
@@ -333,17 +412,21 @@ onMounted(async () => {
               v-for="item in relatedItems"
               :key="item.id"
               class="console-table-row summary-table-grid interactive"
+              role="button"
+              tabindex="0"
               :class="{ active: item.id === selectedCandidateId }"
               @click="fillFormFromItem(item)"
+              @keydown.enter.prevent="fillFormFromItem(item)"
+              @keydown.space.prevent="fillFormFromItem(item)"
             >
               <div class="console-cell">
                 <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
                 <span class="console-subtext">#{{ item.id }}</span>
               </div>
               <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+              <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>
               <div class="console-cell muted console-clamp-2" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
-              <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
-              <div class="console-cell">
+              <div class="console-cell align-right">
                 <span class="console-badge info">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
               </div>
               <div class="console-row-actions" @click.stop>

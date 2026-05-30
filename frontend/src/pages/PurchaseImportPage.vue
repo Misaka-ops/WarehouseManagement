@@ -313,6 +313,21 @@ onMounted(async () => {
         当前导入策略是增量导入。系统会记住每个采购工作表上次导入到哪一行，下次只导入后续新增内容；如果你需要回退或重跑，也可以手工修改这个行号。
       </p>
 
+      <div class="status-strip workflow-strip">
+        <div>
+          <span>步骤 1</span>
+          <strong>确认导入行号</strong>
+        </div>
+        <div>
+          <span>步骤 2</span>
+          <strong>上传 Excel 或同步飞书</strong>
+        </div>
+        <div>
+          <span>步骤 3</span>
+          <strong>预览后转入采购收货</strong>
+        </div>
+      </div>
+
       <div class="metric-grid compact">
         <article class="metric-card">
           <span>当前库存项目</span>
@@ -342,7 +357,7 @@ onMounted(async () => {
             <p>上次导入文件：{{ state.last_workbook_name || '未记录' }}</p>
             <label class="field compact-field">
               <span>上次导入到的 Excel 行号</span>
-              <input v-model.number="rowInputs[state.sheet_name]" min="0" step="1" type="number" />
+              <input v-model.number="rowInputs[state.sheet_name]" min="0" step="1" type="number" inputmode="numeric" />
             </label>
           </article>
         </div>
@@ -397,7 +412,9 @@ onMounted(async () => {
             <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
               {{ syncingFeishu ? '同步中...' : '同步并预览飞书采购申请' }}
             </button>
-            <RouterLink class="action-link ghost" to="/purchase-receiving">去看采购收货</RouterLink>
+            <RouterLink class="action-link ghost" :to="{ path: '/purchase-receiving', query: { source: 'purchase-import' } }">
+              去看采购收货
+            </RouterLink>
           </div>
         </div>
       </section>

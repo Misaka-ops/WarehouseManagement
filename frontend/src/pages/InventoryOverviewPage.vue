@@ -106,8 +106,8 @@ onMounted(async () => {
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">全局视图</p>
-          <h3>库存态势一屏可见</h3>
+          <p class="section-kicker">库存态势</p>
+          <h3>先看全局，再定位单个物料</h3>
         </div>
         <span class="section-meta">{{ dashboard ? `${dashboard.summary.total_items} 项物料` : '加载中' }}</span>
       </div>
@@ -130,13 +130,28 @@ onMounted(async () => {
           <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong>
         </article>
       </div>
+
+      <div class="status-strip workflow-strip">
+        <div>
+          <span>当前筛选</span>
+          <strong>{{ lowStockOnly ? '仅低库存' : '全部库存' }}</strong>
+        </div>
+        <div>
+          <span>当前对象</span>
+          <strong>{{ selectedItem?.material_name || '先选择一个物料' }}</strong>
+        </div>
+        <div>
+          <span>下一步</span>
+          <strong>{{ selectedItem ? '查看流水或发起入库 / 出库' : '先在下方台账中锁定对象' }}</strong>
+        </div>
+      </div>
     </section>
 
     <section class="page-section sticky-head-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">库存列表</p>
-          <h3>快速定位物料</h3>
+          <p class="section-kicker">库存台账</p>
+          <h3>搜索、筛选并选择作业对象</h3>
         </div>
         <span class="section-meta">{{ filteredItems.length }} / {{ inventoryItems.length }}</span>
       </div>
@@ -148,7 +163,7 @@ onMounted(async () => {
         </label>
 
         <button class="soft-button" :class="{ active: lowStockOnly }" type="button" @click="lowStockOnly = !lowStockOnly">
-          {{ lowStockOnly ? '只看低库存中' : '切到低库存' }}
+          {{ lowStockOnly ? '当前只看低库存' : '只看低库存' }}
         </button>
       </div>
 
@@ -159,14 +174,16 @@ onMounted(async () => {
         </label>
 
         <div class="selection-actions">
-          <span>{{ selectedDeleteIds.length }} 项待删除</span>
+          <span>{{ selectedDeleteIds.length }} 项已勾选，仅用于开发清理</span>
           <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
             {{ deleting ? '删除中...' : '删除勾选库存' }}
           </button>
         </div>
       </div>
 
-      <div class="console-table sticky-head-table">
+      <p class="field-hint dev-note">批量删除仅用于当前测试阶段的数据清理，正常作业请使用行内入库 / 出库入口。</p>
+
+      <div class="console-table sticky-head-table desktop-only">
         <div class="console-table-scroll">
           <table class="console-data-table">
             <colgroup>
@@ -245,8 +262,8 @@ onMounted(async () => {
                 </td>
                 <td class="console-data-cell">
                   <div class="console-row-actions" @click.stop>
-                    <RouterLink class="console-action ghost" to="/receipt">入库</RouterLink>
-                    <RouterLink class="console-action secondary" to="/issue">出库</RouterLink>
+                    <RouterLink class="console-action primary" :to="{ path: '/receipt', query: { itemId: item.id, source: 'overview' } }">入库</RouterLink>
+                    <RouterLink class="console-action secondary" :to="{ path: '/issue', query: { itemId: item.id, source: 'overview' } }">出库</RouterLink>
                   </div>
                 </td>
               </tr>
@@ -257,13 +274,64 @@ onMounted(async () => {
         <div v-if="loading" class="console-empty">正在加载库存数据...</div>
         <div v-else-if="!filteredItems.length" class="console-empty">没有匹配到库存项目。</div>
       </div>
+
+      <div class="mobile-only mobile-flow-stack">
+        <div class="stack-list">
+          <article
+            v-for="item in filteredItems"
+            :key="item.id"
+            class="data-row clickable triplet mobile-task-card"
+            :class="{ active: item.id === selectedItemId }"
+            role="button"
+            tabindex="0"
+            @click="selectItem(item)"
+            @keydown.enter.prevent="selectItem(item)"
+            @keydown.space.prevent="selectItem(item)"
+          >
+            <label class="checkbox-chip mobile-select-chip" @click.stop>
+              <input
+                :checked="selectedDeleteIds.includes(item.id)"
+                type="checkbox"
+                @change="toggleItemSelection(item.id)"
+              />
+              <span>勾选清理</span>
+            </label>
+
+            <div class="data-row-main">
+              <div class="data-row-head">
+                <strong>{{ item.material_name }}</strong>
+                <span :class="['data-row-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
+                  {{ item.quantity_on_hand }} {{ item.unit || '件' }}
+                </span>
+              </div>
+              <div class="data-row-meta">
+                <span>规格：{{ item.specification || '未填' }}</span>
+                <span>区位：{{ item.location_name || '未填' }}</span>
+                <span>采购人：{{ item.requester || '未填' }}</span>
+                <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
+                <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>
+              </div>
+            </div>
+
+            <div class="data-row-actions" @click.stop>
+              <RouterLink class="action-link" :to="{ path: '/receipt', query: { itemId: item.id, source: 'overview' } }">入库</RouterLink>
+              <RouterLink class="action-link secondary" :to="{ path: '/issue', query: { itemId: item.id, source: 'overview' } }">
+                出库
+              </RouterLink>
+            </div>
+          </article>
+
+          <div v-if="loading" class="empty-state">正在加载库存数据...</div>
+          <div v-else-if="!filteredItems.length" class="empty-state">没有匹配到库存项目。</div>
+        </div>
+      </div>
     </section>
 
     <section class="page-section">
       <div class="section-heading">
         <div>
           <p class="section-kicker">流水</p>
-          <h3>最近 12 条记录</h3>
+          <h3>{{ selectedItem ? '最近 12 条记录' : '先从上方选择一个物料' }}</h3>
         </div>
         <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
       </div>
@@ -271,11 +339,17 @@ onMounted(async () => {
       <div class="link-row sticky-links">
         <RouterLink class="action-link ghost" to="/inventory-import">去做库存导入</RouterLink>
         <RouterLink class="action-link ghost" to="/inventory-export">去做库存导出</RouterLink>
-        <RouterLink class="action-link" to="/receipt">去做入库</RouterLink>
-        <RouterLink class="action-link secondary" to="/issue">去做出库</RouterLink>
+        <RouterLink v-if="selectedItem" class="action-link" :to="{ path: '/receipt', query: { itemId: selectedItem.id, source: 'overview' } }">
+          去做入库
+        </RouterLink>
+        <span v-else class="action-link disabled">先选物料再入库</span>
+        <RouterLink v-if="selectedItem" class="action-link secondary" :to="{ path: '/issue', query: { itemId: selectedItem.id, source: 'overview' } }">
+          去做出库
+        </RouterLink>
+        <span v-else class="action-link secondary disabled">先选物料再出库</span>
       </div>
 
-      <div class="console-table">
+      <div class="console-table desktop-only">
         <div class="console-table-scroll">
           <div class="console-table-header history-table-grid">
             <span class="console-header-cell">类型</span>
@@ -303,7 +377,33 @@ onMounted(async () => {
         </div>
 
         <div v-if="historyLoading" class="console-empty">正在加载流水...</div>
+        <div v-else-if="!selectedItem" class="console-empty">请先从上方台账中选择一个物料，再查看最近流水。</div>
         <div v-else-if="!itemTransactions.length" class="console-empty">当前物料还没有流水记录。</div>
+      </div>
+
+      <div class="mobile-only mobile-flow-stack">
+        <div class="stack-list">
+          <article v-for="tx in itemTransactions" :key="tx.id" class="data-row mobile-task-card history-mobile-card">
+            <div class="data-row-main">
+              <div class="data-row-head">
+                <span :class="['data-row-badge', tx.transaction_type === 'receipt' ? 'ok' : 'warn']">
+                  {{ tx.transaction_type === 'receipt' ? '入库' : '出库' }}
+                </span>
+                <strong>{{ tx.quantity }} {{ selectedItem?.unit || '件' }}</strong>
+              </div>
+              <div class="data-row-meta">
+                <span>时间：{{ tx.occurred_on }}</span>
+                <span>操作人：{{ tx.operator_name || '未填' }}</span>
+                <span>单号：{{ tx.reference_code || '未填' }}</span>
+                <span>备注：{{ tx.notes || '无' }}</span>
+              </div>
+            </div>
+          </article>
+
+          <div v-if="historyLoading" class="empty-state">正在加载流水...</div>
+          <div v-else-if="!selectedItem" class="empty-state">请先从上方台账中选择一个物料，再查看最近流水。</div>
+          <div v-else-if="!itemTransactions.length" class="empty-state">当前物料还没有流水记录。</div>
+        </div>
       </div>
     </section>
   </div>
