@@ -39,6 +39,19 @@ const allFilteredSelected = computed(
 )
 const hasSelectedDeleteItems = computed(() => selectedDeleteIds.value.length > 0)
 
+function formatCurrency(value?: string | number | null) {
+  if (value == null || value === '') {
+    return '--'
+  }
+
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return '--'
+  }
+
+  return `¥${numericValue.toFixed(2)}`
+}
+
 function toggleItemSelection(itemId: number) {
   if (selectedDeleteIds.value.includes(itemId)) {
     selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => id !== itemId)
@@ -167,21 +180,43 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="selection-toolbar">
-        <label class="checkbox-chip">
-          <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
-          <span>全选当前筛选结果</span>
-        </label>
+      <div class="selection-toolbar business-toolbar">
+        <div class="selection-status">
+          <span>当前作业对象</span>
+          <strong>{{ selectedItem?.material_name || '先从下方台账选择物料' }}</strong>
+          <small>{{ selectedItem ? `库存 ${selectedItem.quantity_on_hand} ${selectedItem.unit || '件'} / 区位 ${selectedItem.location_name || '未填'}` : '选中后可直接发起入库或出库' }}</small>
+        </div>
 
         <div class="selection-actions">
-          <span>{{ selectedDeleteIds.length }} 项已勾选，仅用于开发清理</span>
-          <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
-            {{ deleting ? '删除中...' : '删除勾选库存' }}
-          </button>
+          <RouterLink v-if="selectedItem" class="action-link" :to="{ path: '/receipt', query: { itemId: selectedItem.id, source: 'overview' } }">
+            直接入库
+          </RouterLink>
+          <span v-else class="action-link disabled">先选物料再入库</span>
+          <RouterLink v-if="selectedItem" class="action-link secondary" :to="{ path: '/issue', query: { itemId: selectedItem.id, source: 'overview' } }">
+            直接出库
+          </RouterLink>
+          <span v-else class="action-link secondary disabled">先选物料再出库</span>
         </div>
       </div>
 
-      <p class="field-hint dev-note">批量删除仅用于当前测试阶段的数据清理，正常作业请使用行内入库 / 出库入口。</p>
+      <details class="test-tools-panel">
+        <summary>测试清理工具 <small>{{ selectedDeleteIds.length }} 项已勾选</small></summary>
+        <div class="selection-toolbar selection-toolbar-inline">
+          <label class="checkbox-chip">
+            <input :checked="allFilteredSelected" type="checkbox" @change="toggleSelectAllFiltered" />
+            <span>全选当前筛选结果</span>
+          </label>
+
+          <div class="selection-actions">
+            <span>仅用于开发清理</span>
+            <button class="danger-button" :disabled="deleting || !hasSelectedDeleteItems" type="button" @click="handleBulkDelete">
+              {{ deleting ? '删除中...' : '删除勾选库存' }}
+            </button>
+          </div>
+        </div>
+
+        <p class="field-hint dev-note">批量删除仅用于当前测试阶段的数据清理，正常作业请使用上方选中后的作业入口。</p>
+      </details>
 
       <div class="console-table sticky-head-table desktop-only">
         <div class="console-table-scroll">
@@ -194,9 +229,9 @@ onMounted(async () => {
               <col style="width: 110px" />
               <col style="width: 130px" />
               <col style="width: 130px" />
+              <col style="width: 130px" />
               <col style="width: 150px" />
               <col style="width: 150px" />
-              <col style="width: 160px" />
             </colgroup>
             <thead>
               <tr>
@@ -207,9 +242,9 @@ onMounted(async () => {
                 <th>区位</th>
                 <th>采购人</th>
                 <th>库存</th>
+                <th>金额</th>
                 <th>最近入库</th>
                 <th>最近出库</th>
-                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -232,7 +267,6 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <span class="console-subtext">#{{ item.id }}</span>
                   </div>
                 </td>
                 <td class="console-data-cell">
@@ -255,16 +289,13 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
+                </td>
+                <td class="console-data-cell">
                   <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
                 </td>
                 <td class="console-data-cell">
                   <div class="console-cell muted console-nowrap" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-row-actions" @click.stop>
-                    <RouterLink class="console-action primary" :to="{ path: '/receipt', query: { itemId: item.id, source: 'overview' } }">入库</RouterLink>
-                    <RouterLink class="console-action secondary" :to="{ path: '/issue', query: { itemId: item.id, source: 'overview' } }">出库</RouterLink>
-                  </div>
                 </td>
               </tr>
             </tbody>
@@ -308,16 +339,10 @@ onMounted(async () => {
                 <span>规格：{{ item.specification || '未填' }}</span>
                 <span>区位：{{ item.location_name || '未填' }}</span>
                 <span>采购人：{{ item.requester || '未填' }}</span>
+                <span>金额：{{ formatCurrency(item.total_amount) }}</span>
                 <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
                 <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>
               </div>
-            </div>
-
-            <div class="data-row-actions" @click.stop>
-              <RouterLink class="action-link" :to="{ path: '/receipt', query: { itemId: item.id, source: 'overview' } }">入库</RouterLink>
-              <RouterLink class="action-link secondary" :to="{ path: '/issue', query: { itemId: item.id, source: 'overview' } }">
-                出库
-              </RouterLink>
             </div>
           </article>
 
@@ -333,18 +358,18 @@ onMounted(async () => {
           <p class="section-kicker">流水</p>
           <h3>{{ selectedItem ? '最近 12 条记录' : '先从上方选择一个物料' }}</h3>
         </div>
-        <span class="section-meta" v-if="selectedItem">物料 #{{ selectedItem.id }}</span>
+        <span class="section-meta" v-if="selectedItem">{{ selectedItem.material_name }}</span>
       </div>
 
       <div class="link-row sticky-links">
         <RouterLink class="action-link ghost" to="/inventory-import">去做库存导入</RouterLink>
         <RouterLink class="action-link ghost" to="/inventory-export">去做库存导出</RouterLink>
         <RouterLink v-if="selectedItem" class="action-link" :to="{ path: '/receipt', query: { itemId: selectedItem.id, source: 'overview' } }">
-          去做入库
+          对当前物料入库
         </RouterLink>
         <span v-else class="action-link disabled">先选物料再入库</span>
         <RouterLink v-if="selectedItem" class="action-link secondary" :to="{ path: '/issue', query: { itemId: selectedItem.id, source: 'overview' } }">
-          去做出库
+          对当前物料出库
         </RouterLink>
         <span v-else class="action-link secondary disabled">先选物料再出库</span>
       </div>

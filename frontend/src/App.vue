@@ -172,24 +172,26 @@ watch(
           </div>
         </div>
 
-        <div class="banner-pulse">
-          <span>当前阶段</span>
-          <strong>{{ pageStatusLabel }}</strong>
-          <small>{{ contextChips.length > 1 ? `已挂载 ${contextChips.length - 1} 条操作上下文` : '当前页面可直接开始作业' }}</small>
+        <div class="banner-side">
+          <div v-if="pageShortcuts.length" class="banner-actions">
+            <RouterLink
+              v-for="shortcut in pageShortcuts"
+              :key="`${pageTitle}-${shortcut.to}-${shortcut.label}`"
+              :to="shortcut.to"
+              class="action-link"
+              :class="shortcut.tone ?? 'ghost'"
+            >
+              {{ shortcut.label }}
+            </RouterLink>
+          </div>
+
+          <div class="banner-pulse">
+            <span>当前阶段</span>
+            <strong>{{ pageStatusLabel }}</strong>
+            <small>{{ contextChips.length > 1 ? `已挂载 ${contextChips.length - 1} 条操作上下文` : '当前页面可直接开始作业' }}</small>
+          </div>
         </div>
       </header>
-
-      <div v-if="pageShortcuts.length" class="banner-actions">
-        <RouterLink
-          v-for="shortcut in pageShortcuts"
-          :key="`${pageTitle}-${shortcut.to}-${shortcut.label}`"
-          :to="shortcut.to"
-          class="action-link"
-          :class="shortcut.tone ?? 'ghost'"
-        >
-          {{ shortcut.label }}
-        </RouterLink>
-      </div>
 
       <main class="page-body">
         <RouterView />

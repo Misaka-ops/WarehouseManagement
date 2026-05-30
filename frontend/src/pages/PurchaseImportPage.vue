@@ -470,7 +470,6 @@ onMounted(async () => {
           <article v-for="item in importResult.imported_items" :key="item.purchase_item_id" class="console-table-row import-table-grid">
             <div class="console-cell">
               <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-              <span class="console-subtext">#{{ item.purchase_item_id }}</span>
             </div>
             <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
             <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填'">{{ item.supplier_name || '未填' }}</div>

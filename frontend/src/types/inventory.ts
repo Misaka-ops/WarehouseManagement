@@ -16,6 +16,7 @@ export interface InventoryItem {
   supplier_name: string | null
   location_name: string | null
   quantity_on_hand: string
+  total_amount: string | null
   notes: string | null
   last_receipt_at: string | null
   last_issue_at: string | null
@@ -43,6 +44,7 @@ export interface InventoryTransactionPayload {
   item_id: number
   quantity: number
   occurred_on: string
+  total_amount?: number | null
   operator_name?: string
   reference_code?: string
   notes?: string
@@ -69,6 +71,7 @@ export interface InventoryManualUpsertPayload {
   supplier_name?: string | null
   location_name?: string | null
   quantity: number
+  total_amount?: number | null
   occurred_on: string
   operator_name?: string | null
   reference_code?: string | null
@@ -95,6 +98,7 @@ export interface PurchasePendingReceipt {
   received_quantity: string
   pending_quantity: string
   unit: string | null
+  total_amount: string | null
   expected_arrival: string | null
   inventory_item_id: number | null
   location_name: string | null
@@ -238,6 +242,7 @@ export interface PurchaseReceivePayload {
   purchase_item_id: number
   quantity: number
   occurred_on: string
+  total_amount?: number | null
   location_name?: string
   operator_name?: string
   reference_code?: string

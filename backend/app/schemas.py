@@ -26,6 +26,7 @@ class InventoryItemRead(BaseModel):
     supplier_name: str | None = None
     location_name: str | None = None
     quantity_on_hand: Decimal
+    total_amount: Decimal | None = None
     notes: str | None
     last_receipt_at: date | None
     last_issue_at: date | None
@@ -57,6 +58,7 @@ class InventoryTransactionCreate(BaseModel):
     item_id: int
     quantity: Decimal = Field(gt=0)
     occurred_on: date
+    total_amount: Decimal | None = Field(default=None, ge=0)
     operator_name: str | None = None
     reference_code: str | None = None
     notes: str | None = None
@@ -85,6 +87,7 @@ class InventoryManualUpsertRequest(BaseModel):
     supplier_name: str | None = None
     location_name: str | None = None
     quantity: Decimal = Field(gt=0)
+    total_amount: Decimal | None = Field(default=None, ge=0)
     occurred_on: date
     operator_name: str | None = None
     reference_code: str | None = None
@@ -103,6 +106,7 @@ class PurchaseReceiveCreate(BaseModel):
     purchase_item_id: int
     quantity: Decimal = Field(gt=0)
     occurred_on: date
+    total_amount: Decimal | None = Field(default=None, ge=0)
     location_name: str | None = None
     operator_name: str | None = None
     reference_code: str | None = None
@@ -360,6 +364,7 @@ class PurchaseReceiveCandidate(BaseModel):
     received_quantity: Decimal
     pending_quantity: Decimal
     unit: str | None
+    total_amount: Decimal | None = None
     expected_arrival: date | None
     inventory_item_id: int | None
     location_name: str | None = None

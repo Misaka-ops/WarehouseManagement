@@ -85,6 +85,7 @@ def get_or_create_location(session: Session, name: str | None) -> Location | Non
 def create_schema() -> None:
     Base.metadata.create_all(bind=engine)
     migrate_inventory_item_unique_constraint()
+    ensure_inventory_item_total_amount_column()
 
 
 def _inventory_item_unique_indexes(connection) -> list[list[str]]:
@@ -193,6 +194,19 @@ def migrate_inventory_item_unique_constraint() -> None:
             connection.execute(text("CREATE INDEX ix_inventory_items_material_name ON inventory_items (material_name)"))
         finally:
             connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def ensure_inventory_item_total_amount_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        columns = connection.execute(text("PRAGMA table_info('inventory_items')")).fetchall()
+        column_names = {row[1] for row in columns if len(row) >= 2}
+        if "total_amount" in column_names:
+            return
+
+        connection.execute(text("ALTER TABLE inventory_items ADD COLUMN total_amount NUMERIC(12, 2)"))
 
 
 def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO) -> tuple[int, int]:

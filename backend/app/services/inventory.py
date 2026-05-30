@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.orm import Session, joinedload
@@ -9,6 +9,84 @@ from sqlalchemy.orm import Session, joinedload
 from ..models import InventoryItem, InventoryTransaction, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, TransactionType
 from ..schemas import InventoryDashboardResponse, InventoryItemRead, InventorySummary, PurchaseReceiveCandidate
 from .bootstrap import get_or_create_location, get_or_create_supplier, normalize_text
+
+
+def _quantize_amount(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _resolve_inventory_item_total_amount(session: Session, item_id: int) -> Decimal | None:
+    item = session.get(InventoryItem, item_id)
+    if not item:
+        return None
+    if item.total_amount is not None:
+        return Decimal(item.total_amount)
+
+    purchase_total = session.scalar(
+        select(
+            func.sum(
+                func.coalesce(
+                    (PurchaseOrderItem.total_amount * PurchaseOrderItem.received_quantity)
+                    / func.nullif(PurchaseOrderItem.requested_quantity, 0),
+                    0,
+                )
+            )
+        )
+        .where(
+            PurchaseOrderItem.inventory_item_id == item_id,
+            PurchaseOrderItem.total_amount.is_not(None),
+            PurchaseOrderItem.requested_quantity.is_not(None),
+            PurchaseOrderItem.requested_quantity > 0,
+            PurchaseOrderItem.received_quantity > 0,
+        )
+    )
+    if purchase_total is None:
+        return None
+
+    return _quantize_amount(Decimal(purchase_total))
+
+
+def _resolve_inventory_item_totals(session: Session, item_ids: list[int]) -> dict[int, Decimal]:
+    if not item_ids:
+        return {}
+
+    rows = session.execute(
+        select(
+            PurchaseOrderItem.inventory_item_id,
+            func.sum(
+                func.coalesce(
+                    (PurchaseOrderItem.total_amount * PurchaseOrderItem.received_quantity)
+                    / func.nullif(PurchaseOrderItem.requested_quantity, 0),
+                    0,
+                )
+            ),
+        )
+        .where(
+            PurchaseOrderItem.inventory_item_id.in_(item_ids),
+            PurchaseOrderItem.total_amount.is_not(None),
+            PurchaseOrderItem.requested_quantity.is_not(None),
+            PurchaseOrderItem.requested_quantity > 0,
+            PurchaseOrderItem.received_quantity > 0,
+        )
+        .group_by(PurchaseOrderItem.inventory_item_id)
+    ).all()
+    return {
+        int(inventory_item_id): _quantize_amount(Decimal(total_amount))
+        for inventory_item_id, total_amount in rows
+        if inventory_item_id is not None and total_amount is not None
+    }
+
+
+def _infer_purchase_item_amount(purchase_item: PurchaseOrderItem, quantity: Decimal) -> Decimal | None:
+    if (
+        purchase_item.total_amount is None
+        or purchase_item.requested_quantity is None
+        or Decimal(purchase_item.requested_quantity) <= 0
+    ):
+        return None
+
+    inferred_amount = (Decimal(purchase_item.total_amount) * Decimal(quantity)) / Decimal(purchase_item.requested_quantity)
+    return _quantize_amount(inferred_amount)
 
 
 def build_dashboard(session: Session) -> InventoryDashboardResponse:
@@ -22,6 +100,7 @@ def build_dashboard(session: Session) -> InventoryDashboardResponse:
     pending_orders = session.scalar(
         select(func.count()).select_from(PurchaseOrder).where(PurchaseOrder.status != PurchaseOrderStatus.completed)
     ) or 0
+    fallback_totals = _resolve_inventory_item_totals(session, [item.id for item in items])
 
     item_reads = [
         InventoryItemRead(
@@ -35,6 +114,7 @@ def build_dashboard(session: Session) -> InventoryDashboardResponse:
             supplier_name=item.supplier.name if item.supplier else None,
             location_name=item.location.name if item.location else None,
             quantity_on_hand=item.quantity_on_hand,
+            total_amount=Decimal(item.total_amount) if item.total_amount is not None else fallback_totals.get(item.id),
             notes=item.notes,
             last_receipt_at=item.last_receipt_at,
             last_issue_at=item.last_issue_at,
@@ -86,6 +166,7 @@ def create_transaction(
     item_id: int,
     quantity: Decimal,
     occurred_on: date,
+    total_amount: Decimal | None,
     operator_name: str | None,
     reference_code: str | None,
     notes: str | None,
@@ -98,7 +179,19 @@ def create_transaction(
     if transaction_type == TransactionType.issue and item.quantity_on_hand < quantity:
         raise ValueError("Insufficient stock for issue transaction.")
 
-    item.quantity_on_hand = Decimal(item.quantity_on_hand) + quantity if transaction_type == TransactionType.receipt else Decimal(item.quantity_on_hand) - quantity
+    current_quantity = Decimal(item.quantity_on_hand)
+    if transaction_type == TransactionType.receipt:
+        item.quantity_on_hand = current_quantity + quantity
+        if total_amount is not None:
+            base_amount = _resolve_inventory_item_total_amount(session, item.id) or Decimal("0")
+            item.total_amount = _quantize_amount(base_amount + Decimal(total_amount))
+    else:
+        item.quantity_on_hand = current_quantity - quantity
+        current_total_amount = _resolve_inventory_item_total_amount(session, item.id)
+        if current_total_amount is not None and current_quantity > 0:
+            amount_delta = _quantize_amount((current_total_amount * Decimal(quantity)) / current_quantity)
+            next_total_amount = current_total_amount - amount_delta
+            item.total_amount = _quantize_amount(max(next_total_amount, Decimal("0")))
 
     if transaction_type == TransactionType.receipt:
         item.last_receipt_at = occurred_on
@@ -132,6 +225,7 @@ def upsert_inventory_item(
     supplier_name: str | None,
     location_name: str | None,
     quantity: Decimal,
+    total_amount: Decimal | None,
     occurred_on: date,
     operator_name: str | None,
     reference_code: str | None,
@@ -150,6 +244,7 @@ def upsert_inventory_item(
     normalized_project_name = normalize_text(project_name)
     normalized_supplier_name = normalize_text(supplier_name)
     normalized_location_name = normalize_text(location_name)
+    normalized_total_amount = Decimal(total_amount) if total_amount is not None else None
     normalized_item_notes = normalize_text(item_notes if item_notes is not None else notes)
     normalized_transaction_notes = normalize_text(transaction_notes if transaction_notes is not None else notes)
     normalized_operator_name = normalize_text(operator_name)
@@ -179,6 +274,7 @@ def upsert_inventory_item(
             supplier=supplier,
             location=location,
             quantity_on_hand=Decimal("0"),
+            total_amount=_quantize_amount(normalized_total_amount) if normalized_total_amount is not None else None,
             notes=normalized_item_notes,
         )
         session.add(item)
@@ -192,6 +288,9 @@ def upsert_inventory_item(
         item.unit = normalized_unit
         item.supplier = supplier
         item.location = location
+        if normalized_total_amount is not None:
+            base_amount = _resolve_inventory_item_total_amount(session, item.id) or Decimal("0")
+            item.total_amount = _quantize_amount(base_amount + normalized_total_amount)
         item.notes = normalized_item_notes
 
     item.quantity_on_hand = Decimal(item.quantity_on_hand) + quantity
@@ -322,6 +421,7 @@ def list_pending_purchase_receipts(session: Session, limit: int = 40) -> list[Pu
                 received_quantity=item.received_quantity,
                 pending_quantity=pending,
                 unit=item.unit,
+                total_amount=_infer_purchase_item_amount(item, pending),
                 expected_arrival=item.expected_arrival,
                 inventory_item_id=item.inventory_item_id,
                 location_name=item.inventory_item.location.name if item.inventory_item and item.inventory_item.location else None,
@@ -340,6 +440,7 @@ def receive_purchase_item(
     purchase_item_id: int,
     quantity: Decimal,
     occurred_on: date,
+    total_amount: Decimal | None,
     location_name: str | None,
     operator_name: str | None,
     reference_code: str | None,
@@ -359,6 +460,7 @@ def receive_purchase_item(
 
     location = get_or_create_location(session, normalize_text(location_name))
     inventory_item = purchase_item.inventory_item
+    receipt_amount = Decimal(total_amount) if total_amount is not None else _infer_purchase_item_amount(purchase_item, quantity)
     if not inventory_item:
         inventory_item = InventoryItem(
             requester=purchase_item.order.requester,
@@ -369,13 +471,18 @@ def receive_purchase_item(
             unit=purchase_item.unit,
             location=location,
             quantity_on_hand=Decimal("0"),
+            total_amount=_quantize_amount(receipt_amount) if receipt_amount is not None else None,
             notes=None,
         )
         session.add(inventory_item)
         session.flush()
         purchase_item.inventory_item_id = inventory_item.id
-    elif location is not None:
-        inventory_item.location = location
+    else:
+        if location is not None:
+            inventory_item.location = location
+        if receipt_amount is not None:
+            base_amount = _resolve_inventory_item_total_amount(session, inventory_item.id) or Decimal("0")
+            inventory_item.total_amount = _quantize_amount(base_amount + receipt_amount)
 
     inventory_item.quantity_on_hand = Decimal(inventory_item.quantity_on_hand) + quantity
     inventory_item.last_receipt_at = occurred_on

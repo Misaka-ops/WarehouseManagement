@@ -22,6 +22,7 @@ const form = ref<InventoryManualUpsertPayload>({
   supplier_name: '',
   location_name: '',
   quantity: 1,
+  total_amount: null,
   occurred_on: new Date().toISOString().slice(0, 10),
   operator_name: '',
   reference_code: 'MAN-',
@@ -36,6 +37,7 @@ function normalizeText(value?: string | null) {
 
 function resetTransactionFields() {
   form.value.quantity = 1
+  form.value.total_amount = null
   form.value.occurred_on = new Date().toISOString().slice(0, 10)
   form.value.reference_code = 'MAN-'
   form.value.transaction_notes = ''
@@ -94,6 +96,14 @@ const normalizedRequester = computed(() => normalizeText(form.value.requester))
 const normalizedCategory = computed(() => normalizeText(form.value.purchase_category))
 const normalizedProject = computed(() => normalizeText(form.value.project_name))
 const quantityError = computed(() => (Number(form.value.quantity || 0) > 0 ? '' : '数量必须大于 0。'))
+const amountError = computed(() => {
+  const amount = form.value.total_amount
+  if (amount == null || (typeof amount === 'number' && Number.isNaN(amount))) {
+    return ''
+  }
+
+  return Number(amount) >= 0 ? '' : '金额不能小于 0。'
+})
 
 const exactMatch = computed(() => {
   if (!normalizedMaterial.value) {
@@ -135,6 +145,11 @@ const projectedQuantity = computed(() => {
   const nextQuantity = Number(form.value.quantity || 0)
   return Number((baseQuantity + nextQuantity).toFixed(2))
 })
+const projectedTotalAmount = computed(() => {
+  const baseAmount = Number(exactMatch.value?.total_amount ?? 0)
+  const nextAmount = Number(form.value.total_amount ?? 0)
+  return Number((baseAmount + nextAmount).toFixed(2))
+})
 
 const previewStatus = computed(() => {
   if (exactMatch.value) {
@@ -158,6 +173,11 @@ async function submitForm() {
     return
   }
 
+  if (amountError.value) {
+    ElMessage.warning(amountError.value)
+    return
+  }
+
   submitting.value = true
 
   try {
@@ -171,6 +191,7 @@ async function submitForm() {
       supplier_name: normalizedSupplier.value,
       location_name: normalizedLocation.value,
       quantity: Number(form.value.quantity),
+      total_amount: form.value.total_amount == null ? null : Number(form.value.total_amount),
       occurred_on: form.value.occurred_on,
       operator_name: normalizeText(form.value.operator_name),
       reference_code: normalizeText(form.value.reference_code),
@@ -315,6 +336,13 @@ onMounted(async () => {
             </label>
 
             <label class="field">
+              <span>金额</span>
+              <input v-model.number="form.total_amount" min="0" step="0.01" type="number" inputmode="decimal" placeholder="例如 128.50" />
+              <small v-if="amountError" class="field-hint danger">{{ amountError }}</small>
+              <small v-else class="field-hint">可选填写本次入库金额，台账会累计显示。</small>
+            </label>
+
+            <label class="field">
               <span>入库日期</span>
               <input v-model="form.occurred_on" type="date" />
             </label>
@@ -363,6 +391,8 @@ onMounted(async () => {
           <p>{{ previewStatus }}</p>
           <p>当前库存：{{ exactMatch?.quantity_on_hand ?? 0 }} {{ exactMatch?.unit || form.unit || '件' }}</p>
           <p>提交后预计：{{ projectedQuantity }} {{ exactMatch?.unit || form.unit || '件' }}</p>
+          <p>当前金额：{{ exactMatch?.total_amount ?? '--' }}</p>
+          <p>提交后金额：{{ form.total_amount == null ? (exactMatch?.total_amount ?? '--') : projectedTotalAmount }}</p>
           <p>区位：{{ exactMatch?.location_name || normalizedLocation || '未填写' }}</p>
           <p>本次说明：{{ form.transaction_notes?.trim() || '未填写，系统将使用默认流水说明' }}</p>
           <p>系统匹配字段：物料名称、规格型号、单位、供应商、区位</p>
@@ -421,7 +451,6 @@ onMounted(async () => {
             >
               <div class="console-cell">
                 <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                <span class="console-subtext">#{{ item.id }}</span>
               </div>
               <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
               <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>

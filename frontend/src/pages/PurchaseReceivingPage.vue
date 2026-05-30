@@ -31,11 +31,25 @@ const receiptForm = ref<PurchaseReceivePayload>({
   purchase_item_id: 0,
   quantity: 1,
   occurred_on: new Date().toISOString().slice(0, 10),
+  total_amount: null,
   location_name: '',
   operator_name: '',
   reference_code: 'RK-PO-',
   notes: '',
 })
+
+function formatCurrency(value?: string | number | null) {
+  if (value == null || value === '') {
+    return '--'
+  }
+
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return '--'
+  }
+
+  return `¥${numericValue.toFixed(2)}`
+}
 
 const filteredPendingReceipts = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
@@ -80,6 +94,14 @@ const singleQuantityError = computed(() => {
   return ''
 })
 const occurredOnError = computed(() => (receiptForm.value.occurred_on ? '' : '请选择收货日期。'))
+const amountError = computed(() => {
+  const amount = receiptForm.value.total_amount
+  if (amount == null || (typeof amount === 'number' && Number.isNaN(amount))) {
+    return ''
+  }
+
+  return Number(amount) >= 0 ? '' : '金额不能小于 0。'
+})
 const batchSummary = computed(() => {
   const totalQuantity = selectedPendingReceipts.value.reduce((sum, item) => sum + Number(item.pending_quantity || 0), 0)
   const uniqueSuppliers = [...new Set(selectedPendingReceipts.value.map((item) => item.supplier_name?.trim()).filter(Boolean))]
@@ -111,6 +133,7 @@ function syncReceiptForm(item: PurchasePendingReceipt) {
   choosePendingReceipt(item)
   receiptForm.value.purchase_item_id = item.purchase_item_id
   receiptForm.value.quantity = Number(item.pending_quantity)
+  receiptForm.value.total_amount = item.total_amount == null ? null : Number(item.total_amount)
   receiptForm.value.location_name = item.location_name ?? ''
   receiptForm.value.notes = `${item.material_name} 收货`
 }
@@ -119,6 +142,7 @@ function clearSingleSelection() {
   choosePendingReceipt(null)
   receiptForm.value.purchase_item_id = 0
   receiptForm.value.quantity = 1
+  receiptForm.value.total_amount = null
   receiptForm.value.location_name = ''
   receiptForm.value.notes = ''
 }
@@ -215,6 +239,11 @@ async function submitBatchReceipt() {
     return
   }
 
+  if (amountError.value) {
+    ElMessage.warning(amountError.value)
+    return
+  }
+
   const locationStrategy = receiptForm.value.location_name?.trim()
     ? `统一区位：${receiptForm.value.location_name.trim()}`
     : '统一区位：本次未填写，将沿用各明细当前区位；新建库存项时保持为空'
@@ -305,10 +334,16 @@ async function submitSingleReceipt() {
     return
   }
 
+  if (amountError.value) {
+    ElMessage.warning(amountError.value)
+    return
+  }
+
   receiving.value = true
   try {
     await receivePurchaseItem({
       ...receiptForm.value,
+      total_amount: receiptForm.value.total_amount == null ? null : Number(receiptForm.value.total_amount),
       location_name: receiptForm.value.location_name?.trim() || undefined,
       operator_name: receiptForm.value.operator_name?.trim() || undefined,
       reference_code: receiptForm.value.reference_code?.trim() || undefined,
@@ -372,10 +407,6 @@ onMounted(async () => {
         <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `${pendingReceipts.length} 条待收货` }}</span>
       </div>
 
-      <div class="link-row">
-        <RouterLink class="action-link ghost" to="/purchase-import">先做采购单导入与同步</RouterLink>
-      </div>
-
       <div class="status-strip workflow-strip">
         <div>
           <span>当前模式</span>
@@ -391,19 +422,10 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="metric-grid compact">
-        <article class="metric-card">
-          <span>库存项目</span>
-          <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong>
-        </article>
-        <article class="metric-card">
-          <span>库存总量</span>
-          <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong>
-        </article>
-        <article class="metric-card accent">
-          <span>待处理采购</span>
-          <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong>
-        </article>
+      <div class="inline-summary-row">
+        <span>库存项目 <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong></span>
+        <span>库存总量 <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong></span>
+        <span>待处理采购 <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong></span>
       </div>
     </section>
 
@@ -511,6 +533,7 @@ onMounted(async () => {
                 <span>规格：{{ item.specification || '未填规格' }}</span>
                 <span>供应商：{{ item.supplier_name || '未填供应商' }}</span>
                 <span>请购人：{{ item.requester || '未填' }}</span>
+                <span>金额：{{ formatCurrency(item.total_amount) }}</span>
                 <span>区位：{{ item.location_name || '未填' }}</span>
                 <span>已收：{{ item.received_quantity }} {{ item.unit || '件' }}</span>
                 <span>到货：{{ item.expected_arrival || '未记录' }}</span>
@@ -554,6 +577,7 @@ onMounted(async () => {
             <p>供应商：{{ selectedPendingReceipt?.supplier_name || '未填' }}</p>
             <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
             <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
+            <p>本次金额：{{ formatCurrency(receiptForm.total_amount) }}</p>
             <p>请购数量：{{ selectedPendingReceipt?.requested_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
             <p>已收 / 待收：{{ selectedPendingReceipt?.received_quantity || '0' }} / {{ selectedPendingReceipt?.pending_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
           </template>
@@ -568,12 +592,23 @@ onMounted(async () => {
               <small v-else class="field-hint">可按部分到货数量收货，不能超过待收数量。</small>
             </label>
 
+            <label v-if="receiveMode === 'single'" class="field">
+              <span>本次金额</span>
+              <input v-model.number="receiptForm.total_amount" min="0" step="0.01" type="number" inputmode="decimal" placeholder="例如 128.50" />
+              <small v-if="amountError" class="field-hint danger">{{ amountError }}</small>
+              <small v-else class="field-hint">默认按采购明细金额带入，可手动修正。</small>
+            </label>
+
             <label class="field">
               <span>{{ receiveMode === 'batch' ? '统一收货日期' : '收货日期' }}</span>
               <input v-model="receiptForm.occurred_on" type="date" />
               <small v-if="occurredOnError" class="field-hint danger">{{ occurredOnError }}</small>
             </label>
           </div>
+
+          <p v-if="receiveMode === 'batch'" class="field-hint">
+            批量模式会按采购明细金额比例自动带入；如需逐条修正金额，请切回单条模式确认收货。
+          </p>
 
           <div class="toolbar-grid dual">
             <label class="field">

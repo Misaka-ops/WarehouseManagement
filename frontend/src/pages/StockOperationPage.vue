@@ -210,21 +210,10 @@ onMounted(async () => {
         <span class="section-meta">{{ filteredItems.length }} / {{ inventoryItems.length }}</span>
       </div>
 
-      <p class="section-copy tight">{{ pageDescription }}</p>
-
-      <div class="status-strip workflow-strip">
-        <div>
-          <span>步骤 1</span>
-          <strong>选择库存对象</strong>
-        </div>
-        <div>
-          <span>步骤 2</span>
-          <strong>{{ isReceipt ? '填写入库数量' : '填写出库数量' }}</strong>
-        </div>
-        <div>
-          <span>步骤 3</span>
-          <strong>提交后立即回看流水</strong>
-        </div>
+      <div class="inline-summary-row">
+        <span>{{ pageDescription }}</span>
+        <span>当前对象 <strong>{{ selectedItem?.material_name || '未选择' }}</strong></span>
+        <span>{{ isReceipt ? '入库后会累加库存' : '出库前会校验余量' }}</span>
       </div>
 
       <div class="toolbar-grid compact-toolbar">
@@ -265,7 +254,6 @@ onMounted(async () => {
           >
             <div class="console-cell">
               <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-              <span class="console-subtext">#{{ item.id }}</span>
             </div>
             <div class="console-cell muted console-clamp-2" :title="item.specification || '未填'">{{ item.specification || '未填' }}</div>
             <div class="console-cell muted console-nowrap" :title="item.unit || '件'">{{ item.unit || '件' }}</div>

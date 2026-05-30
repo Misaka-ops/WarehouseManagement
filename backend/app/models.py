@@ -62,6 +62,7 @@ class InventoryItem(TimestampMixin, Base):
     supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     quantity_on_hand: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
     last_receipt_at: Mapped[date | None] = mapped_column(Date)
     last_issue_at: Mapped[date | None] = mapped_column(Date)
