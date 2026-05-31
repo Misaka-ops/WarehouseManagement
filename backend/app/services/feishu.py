@@ -93,13 +93,19 @@ class FeishuClient:
                 raise FeishuIntegrationError(self._format_http_error(exc.code, raw)) from exc
             except URLError as exc:
                 last_error = exc
-                if attempt < retries and _is_transient_url_error(exc):
+                if attempt < retries and _is_transient_transport_error(exc):
                     time.sleep(0.5 * (attempt + 1))
                     continue
-                raise FeishuIntegrationError(f"飞书接口不可达: {exc.reason}") from exc
+                raise FeishuIntegrationError(_format_transport_error(exc)) from exc
+            except (TimeoutError, ssl.SSLError, ConnectionError, OSError) as exc:
+                last_error = exc
+                if attempt < retries and _is_transient_transport_error(exc):
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise FeishuIntegrationError(_format_transport_error(exc)) from exc
         else:
             if last_error is not None:
-                raise FeishuIntegrationError(f"飞书接口不可达: {last_error.reason}") from last_error
+                raise FeishuIntegrationError(_format_transport_error(last_error)) from last_error
             raise FeishuIntegrationError("飞书接口请求失败。")
 
         payload = self._parse_json(raw)
@@ -229,8 +235,26 @@ class FeishuClient:
         return data if isinstance(data, dict) else {"data": data}
 
 
-def _is_transient_url_error(exc: URLError) -> bool:
-    reason = exc.reason
+def _format_transport_error(exc: Exception) -> str:
+    if isinstance(exc, URLError):
+        reason = exc.reason
+        if isinstance(reason, TimeoutError):
+            return "飞书接口请求超时，请稍后重试。"
+        text = str(reason).strip()
+        return f"飞书接口不可达: {text or '未知网络错误'}"
+
+    if isinstance(exc, TimeoutError):
+        return "飞书接口请求超时，请稍后重试。"
+
+    text = str(exc).strip()
+    return f"飞书接口不可达: {text or '未知网络错误'}"
+
+
+def _is_transient_transport_error(exc: Exception) -> bool:
+    if isinstance(exc, TimeoutError):
+        return True
+
+    reason = exc.reason if isinstance(exc, URLError) else exc
     if isinstance(reason, (ssl.SSLError, TimeoutError, ConnectionError, OSError)):
         return True
     text = str(reason)
