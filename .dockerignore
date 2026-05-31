@@ -1,0 +1,17 @@
+.git
+.codex
+.venv
+.venv-linux
+.python-packages
+frontend/node_modules
+frontend/dist
+frontend/vite.err.log
+frontend/vite.out.log
+backend/__pycache__
+backend/.env
+.env.docker
+backend/logs
+backend/data/*.db
+backend/data/*.log
+**/__pycache__
+**/*.pyc

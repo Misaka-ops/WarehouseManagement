@@ -2,6 +2,7 @@
 .venv-linux/
 .python-packages/
 .env
+.env.docker
 **/.env
 __pycache__/
 *.pyc
