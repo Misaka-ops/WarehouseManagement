@@ -11,8 +11,8 @@ const route = useRoute()
 const router = useRouter()
 const { isAuthenticating, login } = useAuth()
 
-const username = ref('admin')
-const password = ref('admin')
+const username = ref('')
+const password = ref('')
 
 const submitDisabled = computed(() => !username.value.trim() || !password.value.trim() || isAuthenticating.value)
 
@@ -70,15 +70,33 @@ async function handleLogin() {
         <span class="section-meta">Auth</span>
       </div>
 
-      <form class="form-stack login-form" @submit.prevent="handleLogin">
+      <form class="form-stack login-form" autocomplete="off" @submit.prevent="handleLogin">
         <label class="field">
           <span>账号</span>
-          <input v-model="username" type="text" autocomplete="username" placeholder="admin" />
+          <input
+            v-model="username"
+            name="warehouse-login-username"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="请输入账号"
+          />
         </label>
 
         <label class="field">
           <span>密码</span>
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="admin" />
+          <input
+            v-model="password"
+            name="warehouse-login-password"
+            type="password"
+            autocomplete="new-password"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="请输入密码"
+          />
         </label>
 
         <div class="link-row">
