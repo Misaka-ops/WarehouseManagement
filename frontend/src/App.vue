@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+
+import { useAuth } from './composables/useAuth'
 
 type NavItem = {
   to: string
   kicker: string
   label: string
+  requiresAuth?: boolean
 }
 
 type NavGroup = {
@@ -22,12 +25,14 @@ type PageShortcut = {
 }
 
 const route = useRoute()
+const router = useRouter()
+const { currentUser, isAuthenticated, logout } = useAuth()
 const navExpanded = ref(false)
 
 const navGroups: NavGroup[] = [
   {
     title: '工作台',
-    items: [{ to: '/', kicker: 'Overview', label: '工作台' }],
+    items: [{ to: '/', kicker: 'Overview', label: '工作台', requiresAuth: true }],
   },
   {
     title: '库存查询',
@@ -36,26 +41,35 @@ const navGroups: NavGroup[] = [
   {
     title: '采购流程',
     items: [
-      { to: '/purchase-import', kicker: 'Prepare', label: '采购导入与同步' },
-      { to: '/purchase-receiving', kicker: 'Receive', label: '采购收货入库' },
+      { to: '/purchase-import', kicker: 'Prepare', label: '采购导入与同步', requiresAuth: true },
+      { to: '/purchase-receiving', kicker: 'Receive', label: '采购收货入库', requiresAuth: true },
     ],
   },
   {
     title: '直接作业',
     items: [
-      { to: '/receipt', kicker: 'Receipt', label: '直接入库' },
-      { to: '/issue', kicker: 'Issue', label: '直接出库' },
-      { to: '/inventory-manual', kicker: 'Manual', label: '手动录入库存' },
+      { to: '/receipt', kicker: 'Receipt', label: '直接入库', requiresAuth: true },
+      { to: '/issue', kicker: 'Issue', label: '直接出库', requiresAuth: true },
+      { to: '/inventory-manual', kicker: 'Manual', label: '手动录入库存', requiresAuth: true },
     ],
   },
   {
     title: '数据维护',
     items: [
-      { to: '/inventory-import', kicker: 'Import', label: '库存导入' },
-      { to: '/inventory-export', kicker: 'Export', label: '库存导出' },
+      { to: '/inventory-import', kicker: 'Import', label: '库存导入', requiresAuth: true },
+      { to: '/inventory-export', kicker: 'Export', label: '库存导出', requiresAuth: true },
     ],
   },
 ]
+
+const visibleNavGroups = computed(() =>
+  navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => isAuthenticated.value || !item.requiresAuth),
+    }))
+    .filter((group) => group.items.length > 0),
+)
 
 const sourceLabelMap: Record<string, string> = {
   'workbench-low-stock': '工作台低库存',
@@ -77,7 +91,11 @@ const bannerGuideLabel = computed(() => {
 })
 const pageShortcuts = computed<PageShortcut[]>(() => {
   const shortcuts = route.meta.shortcuts
-  return Array.isArray(shortcuts) ? (shortcuts as PageShortcut[]) : []
+  if (!Array.isArray(shortcuts)) {
+    return []
+  }
+
+  return (shortcuts as PageShortcut[]).filter((shortcut) => isAuthenticated.value || !router.resolve(shortcut.to).meta.requiresAuth)
 })
 const sourceContextLabel = computed(() => {
   const sourceKey = typeof route.query.source === 'string' ? route.query.source : ''
@@ -150,6 +168,13 @@ watch(
     navExpanded.value = false
   },
 )
+
+async function handleLogout() {
+  logout()
+  if (route.path !== '/overview') {
+    await router.replace('/overview')
+  }
+}
 </script>
 
 <template>
@@ -161,13 +186,21 @@ watch(
         <p class="brand-copy">对象先定位，再执行收发和采购入库。</p>
       </div>
 
+      <div class="banner-pulse sidebar-auth-card">
+        <span>{{ isAuthenticated ? '当前账号' : '游客模式' }}</span>
+        <strong>{{ isAuthenticated ? currentUser?.username : '仅开放库存台账查询' }}</strong>
+        <small>{{ isAuthenticated ? '已解锁全部库存与采购操作。' : '登录后可查看金额、供应商并使用全部功能。' }}</small>
+        <RouterLink v-if="!isAuthenticated" class="action-link primary" to="/login">管理员登录</RouterLink>
+        <button v-else class="action-link ghost auth-action-button" type="button" @click="handleLogout">退出登录</button>
+      </div>
+
       <button class="nav-toggle" type="button" :aria-expanded="navExpanded" aria-controls="primary-nav-groups" @click="navExpanded = !navExpanded">
         <span class="nav-toggle-label">导航 / {{ pageTitle }}</span>
         <span class="nav-toggle-state">{{ navExpanded ? '收起' : '展开' }}</span>
       </button>
 
       <div id="primary-nav-groups" class="nav-groups" :class="{ expanded: navExpanded }">
-        <section v-for="group in navGroups" :key="group.title" class="nav-group">
+        <section v-for="group in visibleNavGroups" :key="group.title" class="nav-group">
           <p class="nav-group-title">{{ group.title }}</p>
           <RouterLink
             v-for="item in group.items"

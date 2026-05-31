@@ -1,10 +1,12 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
+import { useAuth } from './useAuth'
 import { fetchDashboard, fetchItemTransactions } from '../services/api'
 import type { DashboardResponse, InventoryItem, InventoryTransaction } from '../types/inventory'
 
 export function useInventoryWorkspace() {
+  const { isAuthenticated } = useAuth()
   const loading = ref(true)
   const historyLoading = ref(false)
   const dashboard = ref<DashboardResponse | null>(null)
@@ -54,7 +56,7 @@ export function useInventoryWorkspace() {
   }
 
   watch(selectedItemId, async (itemId) => {
-    if (itemId) {
+    if (itemId && isAuthenticated.value) {
       await loadTransactions(itemId)
     } else {
       itemTransactions.value = []

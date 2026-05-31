@@ -6,6 +6,29 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class AuthUserRead(BaseModel):
+    username: str
+    role: str
+
+
+class AuthLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthSessionRead(BaseModel):
+    authenticated: bool
+    user: AuthUserRead | None = None
+    expires_at: datetime | None = None
+
+
+class AuthLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    user: AuthUserRead
+
+
 class InventorySummary(BaseModel):
     total_items: int
     total_stock_quantity: Decimal

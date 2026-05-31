@@ -89,7 +89,7 @@ def _infer_purchase_item_amount(purchase_item: PurchaseOrderItem, quantity: Deci
     return _quantize_amount(inferred_amount)
 
 
-def build_dashboard(session: Session) -> InventoryDashboardResponse:
+def build_dashboard(session: Session, *, include_sensitive: bool = True) -> InventoryDashboardResponse:
     items = session.scalars(
         select(InventoryItem)
         .options(joinedload(InventoryItem.supplier), joinedload(InventoryItem.location))
@@ -105,19 +105,21 @@ def build_dashboard(session: Session) -> InventoryDashboardResponse:
     item_reads = [
         InventoryItemRead(
             id=item.id,
-            requester=item.requester,
-            purchase_category=item.purchase_category,
-            project_name=item.project_name,
+            requester=item.requester if include_sensitive else None,
+            purchase_category=item.purchase_category if include_sensitive else None,
+            project_name=item.project_name if include_sensitive else None,
             material_name=item.material_name,
             specification=item.specification,
             unit=item.unit,
-            supplier_name=item.supplier.name if item.supplier else None,
-            location_name=item.location.name if item.location else None,
+            supplier_name=item.supplier.name if include_sensitive and item.supplier else None,
+            location_name=item.location.name if include_sensitive and item.location else None,
             quantity_on_hand=item.quantity_on_hand,
-            total_amount=Decimal(item.total_amount) if item.total_amount is not None else fallback_totals.get(item.id),
-            notes=item.notes,
-            last_receipt_at=item.last_receipt_at,
-            last_issue_at=item.last_issue_at,
+            total_amount=(Decimal(item.total_amount) if item.total_amount is not None else fallback_totals.get(item.id))
+            if include_sensitive
+            else None,
+            notes=item.notes if include_sensitive else None,
+            last_receipt_at=item.last_receipt_at if include_sensitive else None,
+            last_issue_at=item.last_issue_at if include_sensitive else None,
         )
         for item in items
     ]
@@ -127,7 +129,7 @@ def build_dashboard(session: Session) -> InventoryDashboardResponse:
             total_items=len(items),
             total_stock_quantity=Decimal(total_stock),
             low_stock_items=sum(1 for item in items if item.quantity_on_hand <= 5),
-            pending_purchase_orders=int(pending_orders),
+            pending_purchase_orders=int(pending_orders) if include_sensitive else 0,
         ),
         items=item_reads,
     )

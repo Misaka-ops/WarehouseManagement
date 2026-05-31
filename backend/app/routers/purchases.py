@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from ..auth import require_authenticated_user
 from ..database import get_db
 from ..models import PurchaseOrder
 from ..schemas import (
@@ -47,7 +48,11 @@ from ..services.purchases import (
 )
 
 
-router = APIRouter(prefix="/purchases", tags=["purchases"])
+router = APIRouter(
+    prefix="/purchases",
+    tags=["purchases"],
+    dependencies=[Depends(require_authenticated_user)],
+)
 
 
 def _feishu_http_status(detail: str) -> int:

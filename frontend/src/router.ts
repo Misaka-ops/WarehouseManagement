@@ -4,10 +4,12 @@ import InventoryOverviewPage from './pages/InventoryOverviewPage.vue'
 import InventoryImportPage from './pages/InventoryImportPage.vue'
 import InventoryExportPage from './pages/InventoryExportPage.vue'
 import ManualInventoryPage from './pages/ManualInventoryPage.vue'
+import LoginPage from './pages/LoginPage.vue'
 import PurchaseImportPage from './pages/PurchaseImportPage.vue'
 import PurchaseReceivingPage from './pages/PurchaseReceivingPage.vue'
 import StockOperationPage from './pages/StockOperationPage.vue'
 import WorkbenchPage from './pages/WorkbenchPage.vue'
+import { useAuth } from './composables/useAuth'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -16,6 +18,7 @@ const router = createRouter({
       path: '/',
       component: WorkbenchPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '工作台',
         title: '工作台',
         description: '待办、预警与常用作业入口。',
@@ -50,6 +53,7 @@ const router = createRouter({
       path: '/inventory-import',
       component: InventoryImportPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '数据维护',
         title: '库存导入',
         description: '用仓库模板重建当前库存快照。',
@@ -66,6 +70,7 @@ const router = createRouter({
       path: '/inventory-export',
       component: InventoryExportPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '数据维护',
         title: '库存导出',
         description: '导出当前库存并延续线下表单流转。',
@@ -82,6 +87,7 @@ const router = createRouter({
       path: '/inventory-manual',
       component: ManualInventoryPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '库存作业',
         title: '手动录入库存',
         description: '直接新建或补录散件库存，并自动写入库存流水。',
@@ -99,6 +105,7 @@ const router = createRouter({
       component: StockOperationPage,
       props: { mode: 'receipt' },
       meta: {
+        requiresAuth: true,
         eyebrow: '库存作业',
         title: '直接入库',
         description: '登记补货、退货、盘盈等非采购收货入库。',
@@ -116,6 +123,7 @@ const router = createRouter({
       component: StockOperationPage,
       props: { mode: 'issue' },
       meta: {
+        requiresAuth: true,
         eyebrow: '库存作业',
         title: '直接出库',
         description: '按物料执行领用、发放和其他出库。',
@@ -132,6 +140,7 @@ const router = createRouter({
       path: '/purchase-receiving',
       component: PurchaseReceivingPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '采购入库',
         title: '采购收货入库',
         description: '从待收货采购明细确认收货并写入库存。',
@@ -148,6 +157,7 @@ const router = createRouter({
       path: '/purchase-import',
       component: PurchaseImportPage,
       meta: {
+        requiresAuth: true,
         eyebrow: '采购入库',
         title: '采购单导入与同步',
         description: '导入 Excel 或同步飞书采购单，形成待收货列表。',
@@ -160,7 +170,45 @@ const router = createRouter({
         ],
       },
     },
+    {
+      path: '/login',
+      component: LoginPage,
+      meta: {
+        guestOnly: true,
+        eyebrow: '账号登录',
+        title: '管理员登录',
+        description: '登录后可查看金额、供应商并使用全部库存与采购操作。',
+        module: '权限控制',
+        guide: '游客模式仅开放库存台账基础查询。',
+        statusLabel: '权限验证',
+        shortcuts: [{ label: '先看库存台账', to: '/overview', tone: 'ghost' }],
+      },
+    },
   ],
+})
+
+router.beforeEach((to) => {
+  const { isAuthenticated } = useAuth()
+
+  if (to.path === '/' && !isAuthenticated.value) {
+    return { path: '/overview' }
+  }
+
+  if (to.meta.requiresAuth && !isAuthenticated.value) {
+    return {
+      path: '/login',
+      query: {
+        redirect: to.fullPath,
+      },
+    }
+  }
+
+  if (to.meta.guestOnly && isAuthenticated.value) {
+    const redirect = typeof to.query.redirect === 'string' && to.query.redirect.startsWith('/') ? to.query.redirect : '/'
+    return redirect
+  }
+
+  return true
 })
 
 export default router

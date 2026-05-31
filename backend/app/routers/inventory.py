@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from io import BytesIO
 from urllib.parse import quote
 
+from ..auth import AuthUser, get_optional_current_user, require_authenticated_user
 from ..database import get_db
 from ..models import TransactionType
 from ..schemas import (
@@ -25,12 +26,18 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 @router.get("/dashboard", response_model=InventoryDashboardResponse)
-def get_dashboard(db: Session = Depends(get_db)):
-    return build_dashboard(db)
+def get_dashboard(
+    db: Session = Depends(get_db),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
+):
+    return build_dashboard(db, include_sensitive=current_user is not None)
 
 
 @router.get("/export-workbook")
-def get_export_workbook(db: Session = Depends(get_db)):
+def get_export_workbook(
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     try:
         filename, workbook_bytes = export_warehouse_workbook(db)
     except KeyError as exc:
@@ -47,7 +54,11 @@ def get_export_workbook(db: Session = Depends(get_db)):
 
 
 @router.post("/import-workbook", response_model=InventoryImportResponse)
-async def post_import_workbook(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def post_import_workbook(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     filename = file.filename or "warehouse-workbook.xlsx"
     if not filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
         raise HTTPException(status_code=400, detail="Only Excel .xlsx/.xlsm template files are supported.")
@@ -71,7 +82,11 @@ async def post_import_workbook(file: UploadFile = File(...), db: Session = Depen
 
 
 @router.post("/receipt", response_model=InventoryTransactionRead)
-def post_receipt(payload: InventoryTransactionCreate, db: Session = Depends(get_db)):
+def post_receipt(
+    payload: InventoryTransactionCreate,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     try:
         transaction = create_transaction(db, transaction_type=TransactionType.receipt, **payload.model_dump())
     except ValueError as exc:
@@ -89,7 +104,11 @@ def post_receipt(payload: InventoryTransactionCreate, db: Session = Depends(get_
 
 
 @router.post("/issue", response_model=InventoryTransactionRead)
-def post_issue(payload: InventoryTransactionCreate, db: Session = Depends(get_db)):
+def post_issue(
+    payload: InventoryTransactionCreate,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     try:
         transaction = create_transaction(db, transaction_type=TransactionType.issue, **payload.model_dump())
     except ValueError as exc:
@@ -107,7 +126,11 @@ def post_issue(payload: InventoryTransactionCreate, db: Session = Depends(get_db
 
 
 @router.post("/manual-upsert", response_model=InventoryManualUpsertResponse)
-def post_manual_upsert(payload: InventoryManualUpsertRequest, db: Session = Depends(get_db)):
+def post_manual_upsert(
+    payload: InventoryManualUpsertRequest,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     try:
         item, transaction, created_item = upsert_inventory_item(db, **payload.model_dump())
     except ValueError as exc:
@@ -130,7 +153,11 @@ def post_manual_upsert(payload: InventoryManualUpsertRequest, db: Session = Depe
 
 
 @router.get("/{item_id}/transactions", response_model=list[InventoryTransactionRead])
-def get_item_transactions(item_id: int, db: Session = Depends(get_db)):
+def get_item_transactions(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     transactions = list_item_transactions(db, item_id)
     return [
         InventoryTransactionRead(
@@ -148,7 +175,11 @@ def get_item_transactions(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/bulk-delete", response_model=InventoryBulkDeleteResponse)
-def post_bulk_delete(payload: InventoryBulkDeleteRequest, db: Session = Depends(get_db)):
+def post_bulk_delete(
+    payload: InventoryBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
     try:
         deleted_item_ids = delete_inventory_items(db, payload.item_ids)
     except ValueError as exc:

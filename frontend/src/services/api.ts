@@ -1,6 +1,9 @@
 import axios from 'axios'
 
 import type {
+  AuthLoginPayload,
+  AuthLoginResponse,
+  AuthSessionResponse,
   DashboardResponse,
   FeishuPurchasePreviewResponse,
   FeishuPurchaseSyncRequest,
@@ -25,6 +28,45 @@ const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 10000,
 })
+
+let accessToken = ''
+let unauthorizedHandler: (() => void) | null = null
+
+api.interceptors.request.use((config) => {
+  if (accessToken) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${accessToken}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      unauthorizedHandler?.()
+    }
+    return Promise.reject(error)
+  },
+)
+
+export function setApiAccessToken(token: string | null) {
+  accessToken = token?.trim() ?? ''
+}
+
+export function registerUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler
+}
+
+export async function postLogin(payload: AuthLoginPayload) {
+  const { data } = await api.post<AuthLoginResponse>('/auth/login', payload)
+  return data
+}
+
+export async function fetchAuthSession() {
+  const { data } = await api.get<AuthSessionResponse>('/auth/session')
+  return data
+}
 
 export async function fetchDashboard() {
   const { data } = await api.get<DashboardResponse>('/inventory/dashboard')

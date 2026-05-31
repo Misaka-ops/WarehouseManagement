@@ -3,10 +3,12 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+import { useAuth } from '../composables/useAuth'
 import { deleteInventoryItems } from '../services/api'
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
 
 const route = useRoute()
+const { isAuthenticated } = useAuth()
 const { dashboard, historyLoading, inventoryItems, itemTransactions, loading, loadDashboard, selectItem, selectedItem, selectedItemId } =
   useInventoryWorkspace()
 
@@ -23,14 +25,18 @@ const filteredItems = computed(() => {
       !keyword ||
       item.material_name.toLowerCase().includes(keyword) ||
       (item.specification ?? '').toLowerCase().includes(keyword) ||
-      (item.supplier_name ?? '').toLowerCase().includes(keyword) ||
-      (item.location_name ?? '').toLowerCase().includes(keyword)
+      (isAuthenticated.value && (item.supplier_name ?? '').toLowerCase().includes(keyword)) ||
+      (isAuthenticated.value && (item.location_name ?? '').toLowerCase().includes(keyword))
 
     const matchesLowStock = !lowStockOnly.value || Number(item.quantity_on_hand) <= 5
 
     return matchesKeyword && matchesLowStock
   })
 })
+
+const searchPlaceholder = computed(() =>
+  isAuthenticated.value ? '按物料、规格、供应商、区位搜索' : '按物料名称或规格搜索',
+)
 
 const allFilteredIds = computed(() => filteredItems.value.map((item) => item.id))
 const selectedFilteredIds = computed(() =>
@@ -177,9 +183,13 @@ onMounted(async () => {
           <span>低库存</span>
           <strong>{{ dashboard?.summary.low_stock_items ?? '--' }}</strong>
         </article>
-        <article class="metric-card accent">
+        <article v-if="isAuthenticated" class="metric-card accent">
           <span>待处理采购</span>
           <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong>
+        </article>
+        <article v-else class="metric-card accent">
+          <span>当前权限</span>
+          <strong>游客查询</strong>
         </article>
       </div>
 
@@ -194,7 +204,7 @@ onMounted(async () => {
         </div>
         <div>
           <span>下一步</span>
-          <strong>{{ selectedItem ? '查看流水或发起入库 / 出库' : '先在下方台账中锁定对象' }}</strong>
+          <strong>{{ selectedItem ? (isAuthenticated ? '查看流水或发起入库 / 出库' : '可继续筛选并核对库存') : '先在下方台账中锁定对象' }}</strong>
         </div>
       </div>
     </section>
@@ -211,7 +221,7 @@ onMounted(async () => {
       <div class="toolbar-grid">
         <label class="field">
           <span>搜索</span>
-          <input v-model="searchKeyword" type="text" placeholder="按物料、规格、供应商、区位搜索" />
+          <input v-model="searchKeyword" type="text" :placeholder="searchPlaceholder" />
         </label>
 
         <button class="soft-button" :class="{ active: lowStockOnly }" type="button" @click="lowStockOnly = !lowStockOnly">
@@ -219,7 +229,7 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="selection-toolbar business-toolbar">
+      <div v-if="isAuthenticated" class="selection-toolbar business-toolbar">
         <div class="selection-status">
           <span>当前作业对象</span>
           <strong>{{ selectedItem?.material_name || '先从下方台账选择物料' }}</strong>
@@ -244,10 +254,22 @@ onMounted(async () => {
         </div>
       </div>
 
+      <div v-else class="selection-toolbar business-toolbar">
+        <div class="selection-status">
+          <span>游客权限</span>
+          <strong>当前仅开放库存台账基础查询</strong>
+          <small>登录后可查看金额、供应商、流水，并执行入库、出库、导入导出等操作。</small>
+        </div>
+
+        <div class="selection-actions">
+          <RouterLink class="action-link primary" to="/login">管理员登录</RouterLink>
+        </div>
+      </div>
+
       <div class="console-table sticky-head-table desktop-only">
         <div class="console-table-scroll">
           <table class="console-data-table dense-table overview-data-table">
-            <colgroup>
+            <colgroup v-if="isAuthenticated">
               <col style="width: 56px" />
               <col style="width: 300px" />
               <col style="width: 200px" />
@@ -256,8 +278,13 @@ onMounted(async () => {
               <col style="width: 112px" />
               <col style="width: 112px" />
             </colgroup>
+            <colgroup v-else>
+              <col style="width: 360px" />
+              <col style="width: 120px" />
+              <col style="width: 160px" />
+            </colgroup>
             <thead>
-              <tr>
+              <tr v-if="isAuthenticated">
                 <th class="console-data-head center">选中</th>
                 <th>物料对象</th>
                 <th>区位 / 项目</th>
@@ -265,6 +292,11 @@ onMounted(async () => {
                 <th>金额</th>
                 <th>最近入库</th>
                 <th>最近出库</th>
+              </tr>
+              <tr v-else>
+                <th>物料对象</th>
+                <th>单位</th>
+                <th>库存</th>
               </tr>
             </thead>
             <tbody>
@@ -276,7 +308,7 @@ onMounted(async () => {
                 :class="{ active: item.id === selectedItemId }"
                 @click="selectItem(item)"
               >
-                <td class="console-data-cell center">
+                <td v-if="isAuthenticated" class="console-data-cell center">
                   <label class="console-checkbox" @click.stop>
                     <input
                       :checked="selectedDeleteIds.includes(item.id)"
@@ -289,14 +321,17 @@ onMounted(async () => {
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
                     <small class="console-subline" :title="item.specification || '未填规格'">规格：{{ item.specification || '未填规格' }}</small>
-                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
+                    <small v-if="isAuthenticated" class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
                   </div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell">
                     <span class="muted console-clamp-2" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</span>
                     <small class="console-subline" :title="item.project_name || '未填项目'">项目：{{ item.project_name || '未填项目' }}</small>
                   </div>
+                </td>
+                <td v-else class="console-data-cell v-middle">
+                  <div class="console-cell muted console-nowrap">{{ item.unit || '件' }}</div>
                 </td>
                 <td class="console-data-cell v-middle">
                   <div class="console-cell">
@@ -305,13 +340,13 @@ onMounted(async () => {
                     </span>
                   </div>
                 </td>
-                <td class="console-data-cell v-middle">
+                <td v-if="isAuthenticated" class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
                 </td>
-                <td class="console-data-cell v-middle">
+                <td v-if="isAuthenticated" class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
                 </td>
-                <td class="console-data-cell v-middle">
+                <td v-if="isAuthenticated" class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
                 </td>
               </tr>
@@ -337,7 +372,7 @@ onMounted(async () => {
             @keydown.enter.prevent="selectItem(item)"
             @keydown.space.prevent="selectItem(item)"
           >
-            <label class="checkbox-chip mobile-select-chip" @click.stop>
+            <label v-if="isAuthenticated" class="checkbox-chip mobile-select-chip" @click.stop>
               <input
                 :checked="selectedDeleteIds.includes(item.id)"
                 type="checkbox"
@@ -355,11 +390,12 @@ onMounted(async () => {
               </div>
               <div class="data-row-meta">
                 <span>规格：{{ item.specification || '未填' }}</span>
-                <span>供应商：{{ item.supplier_name || '未填' }}</span>
-                <span>区位：{{ item.location_name || '未填' }}</span>
-                <span>金额：{{ formatCurrency(item.total_amount) }}</span>
-                <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
-                <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>
+                <span v-if="isAuthenticated">供应商：{{ item.supplier_name || '未填' }}</span>
+                <span v-if="isAuthenticated">区位：{{ item.location_name || '未填' }}</span>
+                <span v-if="isAuthenticated">金额：{{ formatCurrency(item.total_amount) }}</span>
+                <span v-if="isAuthenticated">最近入库：{{ item.last_receipt_at || '未记录' }}</span>
+                <span v-if="isAuthenticated">最近出库：{{ item.last_issue_at || '未记录' }}</span>
+                <span v-else>单位：{{ item.unit || '件' }}</span>
               </div>
             </div>
           </article>
@@ -369,7 +405,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <details class="test-tools-panel">
+      <details v-if="isAuthenticated" class="test-tools-panel">
         <summary>开发测试清理 <small>{{ selectedDeleteIds.length }} 项已勾选</small></summary>
         <div class="selection-toolbar selection-toolbar-inline">
           <label class="checkbox-chip">
@@ -389,7 +425,7 @@ onMounted(async () => {
       </details>
     </section>
 
-    <section class="page-section">
+    <section v-if="isAuthenticated" class="page-section">
       <div class="section-heading">
         <div>
           <p class="section-kicker">流水</p>
@@ -466,6 +502,26 @@ onMounted(async () => {
           <div v-else-if="!selectedItem" class="empty-state">请先从上方台账中选择一个物料，再查看最近流水。</div>
           <div v-else-if="!itemTransactions.length" class="empty-state">当前物料还没有流水记录。</div>
         </div>
+      </div>
+    </section>
+
+    <section v-else class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">更多能力</p>
+          <h3>登录后开放完整台账与作业</h3>
+        </div>
+        <span class="section-meta">游客模式</span>
+      </div>
+
+      <div class="receipt-summary emphasis-summary">
+        <p>当前游客模式只保留物料名称、规格、单位和库存数量查询。</p>
+        <p>登录后可查看金额、供应商、区位、最近收发时间和库存流水。</p>
+        <p>登录后也会同步开放采购导入、采购收货、直接入库、直接出库和库存维护入口。</p>
+      </div>
+
+      <div class="link-row">
+        <RouterLink class="action-link primary" to="/login">去登录</RouterLink>
       </div>
     </section>
   </div>

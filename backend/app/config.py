@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BASE_DIR / 'data' / 'warehouse.db').as_posix()}"
     purchase_workbook: Path = PROJECT_DIR / "采购" / "物料采购清单列表0226.xlsx"
     warehouse_workbook: Path = PROJECT_DIR / "仓库" / "仓库库存2026最新版_备注并入规格型号.xlsx"
+    auth_admin_username: str = "admin"
+    auth_admin_password: str = "admin"
+    auth_token_secret: str = "warehouse-auth-secret"
+    auth_token_ttl_hours: int = 72
     feishu_app_id: str | None = None
     feishu_app_secret: str | None = None
     feishu_purchase_approval_code: str | None = None

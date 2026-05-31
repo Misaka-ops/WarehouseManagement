@@ -5,6 +5,29 @@ export interface InventorySummary {
   pending_purchase_orders: number
 }
 
+export interface AuthUser {
+  username: string
+  role: string
+}
+
+export interface AuthLoginPayload {
+  username: string
+  password: string
+}
+
+export interface AuthSessionResponse {
+  authenticated: boolean
+  user: AuthUser | null
+  expires_at: string | null
+}
+
+export interface AuthLoginResponse {
+  access_token: string
+  token_type: 'bearer'
+  expires_at: string
+  user: AuthUser
+}
+
 export interface InventoryItem {
   id: number
   requester: string | null
