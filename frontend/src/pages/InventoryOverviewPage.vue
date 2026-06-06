@@ -81,11 +81,11 @@ const filteredFinishedItems = computed(() => {
 })
 
 const searchPlaceholder = computed(() =>
-  isFinishedView.value
-    ? '按物料、规格、工单号、库位、项目号、客户名称搜索'
-    : isAuthenticated.value
-      ? '按编号、物料、规格、供应商、区位搜索'
-      : '按编号、物料名称或规格搜索',
+  !isAuthenticated.value
+    ? '按物料名称或规格搜索'
+    : isFinishedView.value
+      ? '按物料、规格、工单号、库位、项目号、客户名称搜索'
+      : '按编号、物料、规格、供应商、区位搜索',
 )
 
 const allFilteredIds = computed(() => filteredItems.value.map((item) => item.id))
@@ -328,7 +328,7 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div v-if="isFinishedView" class="selection-toolbar business-toolbar">
+      <div v-if="isFinishedView && isAuthenticated" class="selection-toolbar business-toolbar">
         <div class="selection-status">
           <span>当前查看对象</span>
           <strong>{{ selectedFinishedItem?.material_name || '先从下方成品台账选择对象' }}</strong>
@@ -344,6 +344,24 @@ onMounted(async () => {
         <div class="selection-actions">
           <span class="action-link ghost disabled">成品视图暂不开放直接入库</span>
           <span class="action-link secondary disabled">成品视图暂不开放直接出库</span>
+        </div>
+      </div>
+
+      <div v-else-if="isFinishedView" class="selection-toolbar business-toolbar">
+        <div class="selection-status">
+          <span>游客权限</span>
+          <strong>{{ selectedFinishedItem?.material_name || '当前开放成品台账只读查询' }}</strong>
+          <small>
+            {{
+              selectedFinishedItem
+                ? `规格 ${selectedFinishedItem.specification || '未填'} / 库存 ${selectedFinishedItem.quantity_on_hand} ${selectedFinishedItem.unit || '件'}`
+                : '游客模式下仅展示物料名称、规格和库存，可继续筛选并核对派生流水。'
+            }}
+          </small>
+        </div>
+
+        <div class="selection-actions">
+          <span class="action-link ghost disabled">游客模式仅保留只读查询</span>
         </div>
       </div>
 
@@ -394,7 +412,7 @@ onMounted(async () => {
       <div v-if="isFinishedView" class="console-table sticky-head-table desktop-only ledger-window">
         <div class="console-table-scroll">
           <table class="console-data-table dense-table finished-overview-data-table">
-            <colgroup>
+            <colgroup v-if="isAuthenticated">
               <col style="width: 260px" />
               <col style="width: 240px" />
               <col style="width: 160px" />
@@ -406,8 +424,13 @@ onMounted(async () => {
               <col style="width: 130px" />
               <col style="width: 130px" />
             </colgroup>
+            <colgroup v-else>
+              <col style="width: 300px" />
+              <col style="width: 260px" />
+              <col style="width: 140px" />
+            </colgroup>
             <thead>
-              <tr>
+              <tr v-if="isAuthenticated">
                 <th>物料名称</th>
                 <th>规格型号</th>
                 <th>工单号</th>
@@ -418,6 +441,11 @@ onMounted(async () => {
                 <th class="align-right">库存</th>
                 <th class="align-right">最近入库</th>
                 <th class="align-right">最近出库</th>
+              </tr>
+              <tr v-else>
+                <th>物料名称</th>
+                <th>规格型号</th>
+                <th class="align-right">库存</th>
               </tr>
             </thead>
             <tbody>
@@ -432,25 +460,25 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small class="console-subline">Excel 行 #{{ item.row_id }}</small>
+                    <small v-if="isAuthenticated" class="console-subline">Excel 行 #{{ item.row_id }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-nowrap" :title="item.work_order_no || '未填工单号'">{{ item.work_order_no || '未填工单号' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-nowrap" :title="item.location_name || '未填库位'">{{ item.location_name || '未填库位' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.project_code || '未填项目号'">{{ item.project_code || '未填项目号' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.producer_name || '未填生产抬头或供应商'">{{ item.producer_name || '未填生产抬头或供应商' }}</div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.customer_name || '未填客户名称'">{{ item.customer_name || '未填客户名称' }}</div>
                 </td>
                 <td class="console-data-cell align-right v-middle">
@@ -460,10 +488,10 @@ onMounted(async () => {
                     </span>
                   </div>
                 </td>
-                <td class="console-data-cell align-right v-middle">
+                <td v-if="isAuthenticated" class="console-data-cell align-right v-middle">
                   <div class="console-cell muted console-nowrap align-right" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
                 </td>
-                <td class="console-data-cell align-right v-middle">
+                <td v-if="isAuthenticated" class="console-data-cell align-right v-middle">
                   <div class="console-cell muted console-nowrap align-right" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
                 </td>
               </tr>
@@ -493,11 +521,9 @@ onMounted(async () => {
               <col style="width: 130px" />
             </colgroup>
             <colgroup v-else>
-              <col style="width: 220px" />
-              <col style="width: 160px" />
-              <col style="width: 220px" />
-              <col style="width: 90px" />
-              <col style="width: 120px" />
+              <col style="width: 280px" />
+              <col style="width: 260px" />
+              <col style="width: 140px" />
             </colgroup>
             <thead>
               <tr v-if="isAuthenticated">
@@ -516,9 +542,7 @@ onMounted(async () => {
               </tr>
               <tr v-else>
                 <th>物料名称</th>
-                <th>物品编号</th>
                 <th>规格</th>
-                <th>单位</th>
                 <th class="align-right">库存</th>
               </tr>
             </thead>
@@ -547,9 +571,14 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.item_code || '未填编号'">{{ item.item_code || '未填编号' }}</div>
+                  <div v-if="isAuthenticated" class="console-cell muted console-clamp-2" :title="item.item_code || '未填编号'">
+                    {{ item.item_code || '未填编号' }}
+                  </div>
+                  <div v-else class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">
+                    {{ item.specification || '未填规格' }}
+                  </div>
                 </td>
-                <td class="console-data-cell">
+                <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
                 </td>
                 <td v-if="isAuthenticated" class="console-data-cell">
@@ -563,9 +592,6 @@ onMounted(async () => {
                 </td>
                 <td v-if="isAuthenticated" class="console-data-cell">
                   <div class="console-cell muted console-nowrap" :title="item.requester || '未填申请人'">{{ item.requester || '未填申请人' }}</div>
-                </td>
-                <td v-else class="console-data-cell v-middle">
-                  <div class="console-cell muted console-nowrap">{{ item.unit || '件' }}</div>
                 </td>
                 <td class="console-data-cell align-right v-middle">
                   <div class="console-cell">
@@ -615,13 +641,15 @@ onMounted(async () => {
               </div>
               <div class="data-row-meta">
                 <span>规格：{{ item.specification || '未填' }}</span>
-                <span>工单号：{{ item.work_order_no || '未填' }}</span>
-                <span>库位：{{ item.location_name || '未填' }}</span>
-                <span>项目号：{{ item.project_code || '未填' }}</span>
-                <span>生产抬头或供应商：{{ item.producer_name || '未填' }}</span>
-                <span>客户名称：{{ item.customer_name || '未填' }}</span>
-                <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
-                <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>
+                <template v-if="isAuthenticated">
+                  <span>工单号：{{ item.work_order_no || '未填' }}</span>
+                  <span>库位：{{ item.location_name || '未填' }}</span>
+                  <span>项目号：{{ item.project_code || '未填' }}</span>
+                  <span>生产抬头或供应商：{{ item.producer_name || '未填' }}</span>
+                  <span>客户名称：{{ item.customer_name || '未填' }}</span>
+                  <span>最近入库：{{ item.last_receipt_at || '未记录' }}</span>
+                  <span>最近出库：{{ item.last_issue_at || '未记录' }}</span>
+                </template>
               </div>
             </div>
           </article>
@@ -656,14 +684,12 @@ onMounted(async () => {
                 </span>
               </div>
               <div class="data-row-meta">
-                <span>物品编号：{{ item.item_code || '未填' }}</span>
                 <span>规格：{{ item.specification || '未填' }}</span>
                 <span v-if="isAuthenticated">供应商：{{ item.supplier_name || '未填' }}</span>
                 <span v-if="isAuthenticated">区位：{{ item.location_name || '未填' }}</span>
                 <span v-if="isAuthenticated">金额：{{ formatCurrency(item.total_amount) }}</span>
                 <span v-if="isAuthenticated">最近入库：{{ item.last_receipt_at || '未记录' }}</span>
                 <span v-if="isAuthenticated">最近出库：{{ item.last_issue_at || '未记录' }}</span>
-                <span v-else>单位：{{ item.unit || '件' }}</span>
               </div>
             </div>
           </article>
@@ -817,7 +843,7 @@ onMounted(async () => {
       </div>
 
       <div class="receipt-summary emphasis-summary">
-        <p>当前游客模式只保留物料名称、规格、单位和库存数量查询。</p>
+        <p>当前游客模式只保留物料名称、规格和库存数量查询。</p>
         <p>登录后可查看金额、供应商、区位、最近收发时间和库存流水。</p>
         <p>登录后也会同步开放采购导入、采购收货、直接入库、直接出库和库存维护入口。</p>
       </div>

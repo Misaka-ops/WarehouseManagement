@@ -446,7 +446,7 @@ onMounted(async () => {
 
         <div class="console-table">
           <div class="console-table-scroll">
-            <div class="console-table-header summary-table-grid">
+            <div class="console-table-header manual-candidate-table-grid">
               <span class="console-header-cell">物料</span>
               <span class="console-header-cell">规格</span>
               <span class="console-header-cell">单位</span>
@@ -458,7 +458,7 @@ onMounted(async () => {
             <article
               v-for="item in relatedItems"
               :key="item.id"
-              class="console-table-row summary-table-grid interactive"
+              class="console-table-row manual-candidate-table-grid interactive"
               role="button"
               tabindex="0"
               :class="{ active: item.id === selectedCandidateId }"
