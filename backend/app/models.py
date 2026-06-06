@@ -56,6 +56,7 @@ class InventoryItem(TimestampMixin, Base):
     requester: Mapped[str | None] = mapped_column(String(80))
     purchase_category: Mapped[str | None] = mapped_column(String(80))
     project_name: Mapped[str | None] = mapped_column(String(120))
+    item_code: Mapped[str | None] = mapped_column(String(120))
     material_name: Mapped[str] = mapped_column(String(200), index=True)
     specification: Mapped[str | None] = mapped_column(String(255))
     unit: Mapped[str | None] = mapped_column(String(40))

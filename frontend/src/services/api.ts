@@ -8,6 +8,8 @@ import type {
   FeishuPurchasePreviewResponse,
   FeishuPurchaseSyncRequest,
   FeishuPurchaseImportResponse,
+  FinishedDashboardResponse,
+  FinishedInventoryTransaction,
   InventoryBulkDeleteResponse,
   InventoryImportResponse,
   InventoryManualUpsertPayload,
@@ -73,6 +75,11 @@ export async function fetchDashboard() {
   return data
 }
 
+export async function fetchFinishedDashboard() {
+  const { data } = await api.get<FinishedDashboardResponse>('/inventory/finished-dashboard')
+  return data
+}
+
 export async function postReceipt(payload: InventoryTransactionPayload) {
   const { data } = await api.post('/inventory/receipt', payload)
   return data
@@ -90,6 +97,11 @@ export async function upsertInventoryItem(payload: InventoryManualUpsertPayload)
 
 export async function fetchItemTransactions(itemId: number) {
   const { data } = await api.get<InventoryTransaction[]>(`/inventory/${itemId}/transactions`)
+  return data
+}
+
+export async function fetchFinishedItemTransactions(rowId: number) {
+  const { data } = await api.get<FinishedInventoryTransaction[]>(`/inventory/finished-items/${rowId}/transactions`)
   return data
 }
 

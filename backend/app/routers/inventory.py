@@ -8,6 +8,8 @@ from ..auth import AuthUser, get_optional_current_user, require_authenticated_us
 from ..database import get_db
 from ..models import TransactionType
 from ..schemas import (
+    FinishedInventoryDashboardResponse,
+    FinishedInventoryTransactionRead,
     InventoryBulkDeleteRequest,
     InventoryBulkDeleteResponse,
     InventoryDashboardResponse,
@@ -19,6 +21,7 @@ from ..schemas import (
     InventoryTransactionRead,
 )
 from ..services.bootstrap import export_warehouse_workbook, replace_inventory_from_warehouse_workbook
+from ..services.finished_inventory import list_finished_inventory_items, list_finished_inventory_transactions
 from ..services.inventory import build_dashboard, create_transaction, delete_inventory_items, list_item_transactions, upsert_inventory_item
 
 
@@ -31,6 +34,24 @@ def get_dashboard(
     current_user: AuthUser | None = Depends(get_optional_current_user),
 ):
     return build_dashboard(db, include_sensitive=current_user is not None)
+
+
+@router.get("/finished-dashboard", response_model=FinishedInventoryDashboardResponse)
+def get_finished_dashboard():
+    try:
+        return list_finished_inventory_items()
+    except KeyError as exc:
+        raise HTTPException(status_code=500, detail="Warehouse workbook is missing the '成品库存清单' sheet.") from exc
+
+
+@router.get("/finished-items/{row_id}/transactions", response_model=list[FinishedInventoryTransactionRead])
+def get_finished_item_transactions(row_id: int):
+    try:
+        return list_finished_inventory_transactions(row_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=500, detail="Warehouse workbook is missing the '成品库存清单' sheet.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/export-workbook")

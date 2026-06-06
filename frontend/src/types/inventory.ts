@@ -1,3 +1,5 @@
+export type InventoryViewKind = 'raw' | 'finished'
+
 export interface InventorySummary {
   total_items: number
   total_stock_quantity: string
@@ -33,6 +35,7 @@ export interface InventoryItem {
   requester: string | null
   purchase_category: string | null
   project_name: string | null
+  item_code: string | null
   material_name: string
   specification: string | null
   unit: string | null
@@ -48,6 +51,44 @@ export interface InventoryItem {
 export interface DashboardResponse {
   summary: InventorySummary
   items: InventoryItem[]
+}
+
+export interface FinishedInventorySummary {
+  total_items: number
+  total_stock_quantity: string
+  low_stock_items: number
+}
+
+export interface FinishedInventoryItem {
+  row_id: number
+  material_name: string
+  specification: string | null
+  work_order_no: string | null
+  quantity_on_hand: string
+  unit: string | null
+  location_name: string | null
+  project_code: string | null
+  producer_name: string | null
+  customer_name: string | null
+  notes: string | null
+  last_receipt_at: string | null
+  last_issue_at: string | null
+}
+
+export interface FinishedDashboardResponse {
+  summary: FinishedInventorySummary
+  items: FinishedInventoryItem[]
+}
+
+export interface FinishedInventoryTransaction {
+  id: string
+  row_id: number
+  transaction_type: 'receipt' | 'issue'
+  quantity: string
+  occurred_on: string | null
+  operator_name: string | null
+  reference_code: string | null
+  notes: string | null
 }
 
 export interface InventoryImportResponse {
@@ -88,6 +129,7 @@ export interface InventoryManualUpsertPayload {
   requester?: string | null
   purchase_category?: string | null
   project_name?: string | null
+  item_code?: string | null
   material_name: string
   specification?: string | null
   unit?: string | null
@@ -115,6 +157,7 @@ export interface PurchasePendingReceipt {
   sheet_name: string
   supplier_name: string | null
   requester: string | null
+  item_code: string | null
   material_name: string
   specification: string | null
   requested_quantity: string | null
@@ -266,6 +309,7 @@ export interface PurchaseReceivePayload {
   quantity: number
   occurred_on: string
   total_amount?: number | null
+  item_code?: string | null
   supplier_name?: string
   location_name?: string
   operator_name?: string

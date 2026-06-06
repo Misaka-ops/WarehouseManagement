@@ -86,6 +86,7 @@ def create_schema() -> None:
     Base.metadata.create_all(bind=engine)
     migrate_inventory_item_unique_constraint()
     ensure_inventory_item_total_amount_column()
+    ensure_inventory_item_item_code_column()
 
 
 def _inventory_item_unique_indexes(connection) -> list[list[str]]:
@@ -207,6 +208,19 @@ def ensure_inventory_item_total_amount_column() -> None:
             return
 
         connection.execute(text("ALTER TABLE inventory_items ADD COLUMN total_amount NUMERIC(12, 2)"))
+
+
+def ensure_inventory_item_item_code_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        columns = connection.execute(text("PRAGMA table_info('inventory_items')")).fetchall()
+        column_names = {row[1] for row in columns if len(row) >= 2}
+        if "item_code" in column_names:
+            return
+
+        connection.execute(text("ALTER TABLE inventory_items ADD COLUMN item_code VARCHAR(120)"))
 
 
 def import_warehouse_workbook(session: Session, workbook_source: Path | BytesIO) -> tuple[int, int]:

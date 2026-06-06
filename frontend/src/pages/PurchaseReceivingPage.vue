@@ -32,6 +32,7 @@ const receiptForm = ref<PurchaseReceivePayload>({
   quantity: 1,
   occurred_on: new Date().toISOString().slice(0, 10),
   total_amount: null,
+  item_code: '',
   supplier_name: '',
   location_name: '',
   operator_name: '',
@@ -182,6 +183,7 @@ function syncReceiptForm(item: PurchasePendingReceipt) {
   receiptForm.value.purchase_item_id = item.purchase_item_id
   receiptForm.value.quantity = Number(item.pending_quantity)
   receiptForm.value.total_amount = item.total_amount == null ? null : Number(item.total_amount)
+  receiptForm.value.item_code = item.item_code ?? ''
   receiptForm.value.supplier_name = item.supplier_name ?? ''
   receiptForm.value.location_name = item.location_name ?? ''
   receiptForm.value.notes = `${item.material_name} 收货`
@@ -192,6 +194,7 @@ function clearSingleSelection() {
   receiptForm.value.purchase_item_id = 0
   receiptForm.value.quantity = 1
   receiptForm.value.total_amount = null
+  receiptForm.value.item_code = ''
   receiptForm.value.supplier_name = ''
   receiptForm.value.location_name = ''
   receiptForm.value.notes = ''
@@ -219,6 +222,7 @@ function resetBatchDraft() {
   receiptForm.value.purchase_item_id = 0
   receiptForm.value.quantity = 1
   receiptForm.value.total_amount = null
+  receiptForm.value.item_code = ''
   receiptForm.value.supplier_name = ''
   receiptForm.value.location_name = ''
   receiptForm.value.notes = ''
@@ -431,6 +435,7 @@ async function submitSingleReceipt() {
       operator_name: receiptForm.value.operator_name?.trim() || undefined,
       reference_code: receiptForm.value.reference_code?.trim() || undefined,
       notes: receiptForm.value.notes?.trim() || undefined,
+      item_code: receiptForm.value.item_code?.trim() || undefined,
     })
     ElMessage.success('采购收货已入库。')
     await Promise.all([loadDashboard({ quiet: true }), loadPendingReceipts()])
@@ -785,6 +790,7 @@ onMounted(async () => {
           <template v-else>
             <p>供应商：{{ receiptForm.supplier_name || selectedPendingReceipt?.supplier_name || '未填' }}</p>
             <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
+            <p>物品编号：{{ receiptForm.item_code || selectedPendingReceipt?.item_code || '未填' }}</p>
             <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
             <p>本次金额：{{ formatCurrency(receiptForm.total_amount) }}</p>
             <p>请购数量：{{ selectedPendingReceipt?.requested_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
@@ -820,6 +826,12 @@ onMounted(async () => {
           </p>
 
           <div class="toolbar-grid dual">
+            <label v-if="receiveMode === 'single'" class="field">
+              <span>物品编号</span>
+              <input v-model="receiptForm.item_code" type="text" placeholder="例如 SKU-20260606-01" />
+              <small class="field-hint">只写入库存主档，不参与当前收货匹配。</small>
+            </label>
+
             <label class="field">
               <span>{{ receiveMode === 'batch' ? '统一供应商' : '供应商' }}</span>
               <input

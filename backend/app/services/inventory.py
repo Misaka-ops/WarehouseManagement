@@ -108,6 +108,7 @@ def build_dashboard(session: Session, *, include_sensitive: bool = True) -> Inve
             requester=item.requester if include_sensitive else None,
             purchase_category=item.purchase_category if include_sensitive else None,
             project_name=item.project_name if include_sensitive else None,
+            item_code=item.item_code,
             material_name=item.material_name,
             specification=item.specification,
             unit=item.unit,
@@ -221,6 +222,7 @@ def upsert_inventory_item(
     requester: str | None,
     purchase_category: str | None,
     project_name: str | None,
+    item_code: str | None,
     material_name: str,
     specification: str | None,
     unit: str | None,
@@ -244,6 +246,7 @@ def upsert_inventory_item(
     normalized_requester = normalize_text(requester)
     normalized_purchase_category = normalize_text(purchase_category)
     normalized_project_name = normalize_text(project_name)
+    normalized_item_code = normalize_text(item_code)
     normalized_supplier_name = normalize_text(supplier_name)
     normalized_location_name = normalize_text(location_name)
     normalized_total_amount = Decimal(total_amount) if total_amount is not None else None
@@ -270,6 +273,7 @@ def upsert_inventory_item(
             requester=normalized_requester,
             purchase_category=normalized_purchase_category,
             project_name=normalized_project_name,
+            item_code=normalized_item_code,
             material_name=normalized_material_name,
             specification=normalized_specification,
             unit=normalized_unit,
@@ -285,6 +289,8 @@ def upsert_inventory_item(
         item.requester = normalized_requester
         item.purchase_category = normalized_purchase_category
         item.project_name = normalized_project_name
+        if normalized_item_code is not None:
+            item.item_code = normalized_item_code
         item.material_name = normalized_material_name
         item.specification = normalized_specification
         item.unit = normalized_unit
@@ -417,6 +423,7 @@ def list_pending_purchase_receipts(session: Session, limit: int = 40) -> list[Pu
                 sheet_name=item.order.sheet_name,
                 supplier_name=item.order.supplier_name,
                 requester=item.order.requester,
+                item_code=item.inventory_item.item_code if item.inventory_item else None,
                 material_name=item.material_name,
                 specification=item.specification,
                 requested_quantity=item.requested_quantity,
@@ -443,6 +450,7 @@ def receive_purchase_item(
     quantity: Decimal,
     occurred_on: date,
     total_amount: Decimal | None,
+    item_code: str | None,
     supplier_name: str | None,
     location_name: str | None,
     operator_name: str | None,
@@ -463,6 +471,7 @@ def receive_purchase_item(
 
     normalized_supplier_name = normalize_text(supplier_name)
     normalized_location_name = normalize_text(location_name)
+    normalized_item_code = normalize_text(item_code)
     supplier = get_or_create_supplier(session, normalized_supplier_name)
     location = get_or_create_location(session, normalized_location_name)
     inventory_item = purchase_item.inventory_item
@@ -474,6 +483,7 @@ def receive_purchase_item(
             requester=purchase_item.order.requester,
             purchase_category=purchase_item.order.purchase_category,
             project_name=purchase_item.order.project_name,
+            item_code=normalized_item_code,
             material_name=purchase_item.material_name,
             specification=purchase_item.specification,
             unit=purchase_item.unit,
@@ -487,6 +497,8 @@ def receive_purchase_item(
         session.flush()
         purchase_item.inventory_item_id = inventory_item.id
     else:
+        if normalized_item_code is not None:
+            inventory_item.item_code = normalized_item_code
         if normalized_supplier_name is not None:
             inventory_item.supplier = supplier
         if location is not None:

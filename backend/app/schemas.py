@@ -43,6 +43,7 @@ class InventoryItemRead(BaseModel):
     requester: str | None
     purchase_category: str | None
     project_name: str | None
+    item_code: str | None
     material_name: str
     specification: str | None
     unit: str | None
@@ -58,6 +59,44 @@ class InventoryItemRead(BaseModel):
 class InventoryDashboardResponse(BaseModel):
     summary: InventorySummary
     items: list[InventoryItemRead]
+
+
+class FinishedInventorySummary(BaseModel):
+    total_items: int
+    total_stock_quantity: Decimal
+    low_stock_items: int
+
+
+class FinishedInventoryItemRead(BaseModel):
+    row_id: int
+    material_name: str
+    specification: str | None
+    work_order_no: str | None
+    quantity_on_hand: Decimal
+    unit: str | None
+    location_name: str | None
+    project_code: str | None
+    producer_name: str | None
+    customer_name: str | None
+    notes: str | None
+    last_receipt_at: date | None
+    last_issue_at: date | None
+
+
+class FinishedInventoryDashboardResponse(BaseModel):
+    summary: FinishedInventorySummary
+    items: list[FinishedInventoryItemRead]
+
+
+class FinishedInventoryTransactionRead(BaseModel):
+    id: str
+    row_id: int
+    transaction_type: str
+    quantity: Decimal
+    occurred_on: date | None
+    operator_name: str | None = None
+    reference_code: str | None = None
+    notes: str | None = None
 
 
 class InventoryImportResponse(BaseModel):
@@ -104,6 +143,7 @@ class InventoryManualUpsertRequest(BaseModel):
     requester: str | None = None
     purchase_category: str | None = None
     project_name: str | None = None
+    item_code: str | None = None
     material_name: str
     specification: str | None = None
     unit: str | None = None
@@ -130,6 +170,7 @@ class PurchaseReceiveCreate(BaseModel):
     quantity: Decimal = Field(gt=0)
     occurred_on: date
     total_amount: Decimal | None = Field(default=None, ge=0)
+    item_code: str | None = None
     supplier_name: str | None = None
     location_name: str | None = None
     operator_name: str | None = None
@@ -382,6 +423,7 @@ class PurchaseReceiveCandidate(BaseModel):
     sheet_name: str
     supplier_name: str | None
     requester: str | None
+    item_code: str | None = None
     material_name: str
     specification: str | None
     requested_quantity: Decimal | None

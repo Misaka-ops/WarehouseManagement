@@ -16,6 +16,7 @@ const form = ref<InventoryManualUpsertPayload>({
   requester: '',
   purchase_category: '',
   project_name: '',
+  item_code: '',
   material_name: '',
   specification: '',
   unit: '',
@@ -47,6 +48,7 @@ function fillFormFromItem(item: InventoryItem) {
   form.value.requester = item.requester ?? ''
   form.value.purchase_category = item.purchase_category ?? ''
   form.value.project_name = item.project_name ?? ''
+  form.value.item_code = item.item_code ?? ''
   form.value.material_name = item.material_name
   form.value.specification = item.specification ?? ''
   form.value.unit = item.unit ?? ''
@@ -72,6 +74,7 @@ function matchesKeyword(item: InventoryItem, keywords: string[]) {
 
   const haystack = [
     item.material_name,
+    item.item_code ?? '',
     item.specification ?? '',
     item.unit ?? '',
     item.supplier_name ?? '',
@@ -95,6 +98,7 @@ const normalizedLocation = computed(() => normalizeText(form.value.location_name
 const normalizedRequester = computed(() => normalizeText(form.value.requester))
 const normalizedCategory = computed(() => normalizeText(form.value.purchase_category))
 const normalizedProject = computed(() => normalizeText(form.value.project_name))
+const normalizedItemCode = computed(() => normalizeText(form.value.item_code))
 const quantityError = computed(() => (Number(form.value.quantity || 0) > 0 ? '' : '数量必须大于 0。'))
 const amountError = computed(() => {
   const amount = form.value.total_amount
@@ -185,6 +189,7 @@ async function submitForm() {
       requester: normalizedRequester.value,
       purchase_category: normalizedCategory.value,
       project_name: normalizedProject.value,
+      item_code: normalizedItemCode.value,
       material_name: materialName,
       specification: normalizedSpecification.value,
       unit: normalizedUnit.value,
@@ -233,7 +238,7 @@ onMounted(async () => {
       </div>
 
       <p class="section-copy tight">
-        系统会用“物料名称、规格型号、单位、供应商、区位”来判断是否补到现有库存。库存项说明不会参与匹配；采购类别、项目和申请人只用于业务归属。
+        系统会用“物料名称、规格型号、单位、供应商、区位”来判断是否补到现有库存。物品编号和库存项说明不会参与匹配；采购类别、项目和申请人只用于业务归属。
       </p>
 
       <div class="status-strip workflow-strip">
@@ -283,6 +288,12 @@ onMounted(async () => {
           </div>
 
           <div class="manual-form-grid">
+            <label class="field">
+              <span>物品编号</span>
+              <input v-model.trim="form.item_code" type="text" placeholder="例如 SKU-20260606-01" />
+              <small class="field-hint">保存到库存主档，不参与合并匹配。</small>
+            </label>
+
             <label class="field">
               <span>供应商</span>
               <input v-model.trim="form.supplier_name" type="text" placeholder="例如 深圳某某五金" />
@@ -393,9 +404,11 @@ onMounted(async () => {
           <p>提交后预计：{{ projectedQuantity }} {{ exactMatch?.unit || form.unit || '件' }}</p>
           <p>当前金额：{{ exactMatch?.total_amount ?? '--' }}</p>
           <p>提交后金额：{{ form.total_amount == null ? (exactMatch?.total_amount ?? '--') : projectedTotalAmount }}</p>
+          <p>物品编号：{{ exactMatch?.item_code || normalizedItemCode || '未填写' }}</p>
           <p>区位：{{ exactMatch?.location_name || normalizedLocation || '未填写' }}</p>
           <p>本次说明：{{ form.transaction_notes?.trim() || '未填写，系统将使用默认流水说明' }}</p>
           <p>系统匹配字段：物料名称、规格型号、单位、供应商、区位</p>
+          <p>物品编号仅保存到库存主档，不参与系统合并匹配</p>
         </div>
 
         <div class="status-strip manual-status">
@@ -406,6 +419,10 @@ onMounted(async () => {
           <div>
             <span>单位</span>
             <strong>{{ normalizedUnit || '--' }}</strong>
+          </div>
+          <div>
+            <span>编号</span>
+            <strong>{{ normalizedItemCode || exactMatch?.item_code || '--' }}</strong>
           </div>
           <div>
             <span>供应商</span>

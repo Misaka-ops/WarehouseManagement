@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuth } from './composables/useAuth'
+import type { InventoryViewKind } from './types/inventory'
 
 type NavItem = {
   to: string
@@ -28,6 +29,13 @@ const route = useRoute()
 const router = useRouter()
 const { currentUser, isAuthenticated, logout } = useAuth()
 const navExpanded = ref(false)
+const inventoryViewKind = computed<InventoryViewKind>({
+  get: () => (route.path === '/overview' && route.query.kind === 'finished' ? 'finished' : 'raw'),
+  set: (nextKind) => {
+    void router.push({ path: '/overview', query: { kind: nextKind } })
+  },
+})
+const isFinishedOverview = computed(() => route.path === '/overview' && inventoryViewKind.value === 'finished')
 
 const navGroups: NavGroup[] = [
   {
@@ -78,18 +86,26 @@ const sourceLabelMap: Record<string, string> = {
   'purchase-import': '采购导入',
 }
 
-const pageEyebrow = computed(() => String(route.meta.eyebrow ?? '仓储运营'))
-const pageTitle = computed(() => String(route.meta.title ?? '仓储控制台'))
-const pageDescription = computed(() => String(route.meta.description ?? ''))
-const pageModule = computed(() => String(route.meta.module ?? pageEyebrow.value))
-const pageGuide = computed(() => String(route.meta.guide ?? ''))
-const pageStatusLabel = computed(() => String(route.meta.statusLabel ?? '执行中'))
+const pageEyebrow = computed(() => (isFinishedOverview.value ? '成品台账' : String(route.meta.eyebrow ?? '仓储运营')))
+const pageTitle = computed(() => (isFinishedOverview.value ? '成品库存台账' : String(route.meta.title ?? '仓储控制台')))
+const pageDescription = computed(() =>
+  isFinishedOverview.value ? '查看成品库存、库位和由 Excel 派生的最近收发记录。' : String(route.meta.description ?? ''),
+)
+const pageModule = computed(() => (isFinishedOverview.value ? '库存查询' : String(route.meta.module ?? pageEyebrow.value)))
+const pageGuide = computed(() =>
+  isFinishedOverview.value ? '当前为成品只读视图，可搜索、筛选并核对派生流水。' : String(route.meta.guide ?? ''),
+)
+const pageStatusLabel = computed(() => (isFinishedOverview.value ? '成品核对' : String(route.meta.statusLabel ?? '执行中')))
 const bannerSummary = computed(() => pageDescription.value.trim())
 const bannerGuideLabel = computed(() => {
   const guide = pageGuide.value.trim()
   return guide !== bannerSummary.value ? guide : ''
 })
 const pageShortcuts = computed<PageShortcut[]>(() => {
+  if (isFinishedOverview.value) {
+    return []
+  }
+
   const shortcuts = route.meta.shortcuts
   if (!Array.isArray(shortcuts)) {
     return []
@@ -118,6 +134,10 @@ const purchaseItemScopeCount = computed(() => {
   return [...new Set(rawValue.split(',').map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))].length
 })
 const bannerPulseNote = computed(() => {
+  if (isFinishedOverview.value) {
+    return '当前正在查看成品库存清单，只读模式。'
+  }
+
   if (purchaseItemScopeCount.value > 1) {
     return `当前正在处理本次带入的 ${purchaseItemScopeCount.value} 条采购明细。`
   }
@@ -139,6 +159,10 @@ const bannerPulseNote = computed(() => {
 
 const contextChips = computed(() => {
   const chips: Array<{ label: string; value: string }> = [{ label: '模块', value: pageModule.value }]
+  if (route.path === '/overview') {
+    chips.push({ label: '口径', value: inventoryViewKind.value === 'finished' ? '成品' : '原料' })
+  }
+
   if (sourceContextLabel.value) {
     chips.push({ label: '来源', value: sourceContextLabel.value })
   }
@@ -175,6 +199,14 @@ async function handleLogout() {
     await router.replace('/overview')
   }
 }
+
+function isOverviewNavItem(item: NavItem) {
+  return item.to === '/overview'
+}
+
+function navigateToCurrentOverview() {
+  void router.push({ path: '/overview', query: { kind: inventoryViewKind.value } })
+}
 </script>
 
 <template>
@@ -202,16 +234,37 @@ async function handleLogout() {
       <div id="primary-nav-groups" class="nav-groups" :class="{ expanded: navExpanded }">
         <section v-for="group in visibleNavGroups" :key="group.title" class="nav-group">
           <p class="nav-group-title">{{ group.title }}</p>
-          <RouterLink
-            v-for="item in group.items"
-            :key="item.to"
-            :to="item.to"
-            class="nav-link"
-            :class="{ active: route.path === item.to }"
-          >
-            <span class="nav-kicker">{{ item.kicker }}</span>
-            <strong>{{ item.label }}</strong>
-          </RouterLink>
+          <template v-for="item in group.items" :key="item.to">
+            <div
+              v-if="isOverviewNavItem(item)"
+              class="nav-link nav-link-select"
+              :class="{ active: route.path === item.to }"
+              role="button"
+              tabindex="0"
+              @click="navigateToCurrentOverview"
+              @keydown.enter.prevent="navigateToCurrentOverview"
+              @keydown.space.prevent="navigateToCurrentOverview"
+            >
+              <span class="nav-kicker">{{ inventoryViewKind === 'finished' ? 'Finished' : item.kicker }}</span>
+              <strong>{{ inventoryViewKind === 'finished' ? '成品库存台账' : item.label }}</strong>
+              <label class="nav-select-shell" @click.stop>
+                <span class="nav-select-label">当前查看</span>
+                <select v-model="inventoryViewKind">
+                  <option value="raw">原料台账</option>
+                  <option value="finished">成品台账</option>
+                </select>
+              </label>
+            </div>
+            <RouterLink
+              v-else
+              :to="item.to"
+              class="nav-link"
+              :class="{ active: route.path === item.to }"
+            >
+              <span class="nav-kicker">{{ item.kicker }}</span>
+              <strong>{{ item.label }}</strong>
+            </RouterLink>
+          </template>
         </section>
       </div>
     </aside>
