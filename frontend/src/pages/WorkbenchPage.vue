@@ -193,20 +193,24 @@ onMounted(async () => {
         <span class="section-meta">{{ loading ? '加载中' : `预览 ${lowStockItems.length} / ${dashboard?.summary.low_stock_items ?? 0} 条` }}</span>
       </div>
 
-      <div class="console-table desktop-only">
+      <div class="console-table desktop-only ledger-window">
         <div class="console-table-scroll workbench-table-scroll">
           <table class="console-data-table dense-table workbench-data-table">
             <colgroup>
-              <col style="width: 38%" />
-              <col style="width: 28%" />
-              <col style="width: 16%" />
-              <col style="width: 18%" />
+              <col style="width: 250px" />
+              <col style="width: 180px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 120px" />
+              <col style="width: 120px" />
             </colgroup>
             <thead>
               <tr>
-                <th>物料</th>
-                <th>规格 / 区位</th>
-                <th>采购人</th>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>供应商</th>
+                <th>区位</th>
+                <th>申请人</th>
                 <th class="align-right">库存</th>
               </tr>
             </thead>
@@ -220,16 +224,21 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell">
-                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
-                    <small class="console-subline" :title="item.location_name || '未填区位'">区位：{{ item.location_name || '未填区位' }}</small>
-                  </div>
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
                 </td>
                 <td class="console-data-cell v-middle">
-                  <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                  <div class="console-cell muted console-nowrap" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
                 </td>
                 <td class="console-data-cell align-right v-middle">
-                  <span class="console-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
+                  <div class="console-cell align-right">
+                    <span class="console-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -281,20 +290,24 @@ onMounted(async () => {
         <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `预览 ${pendingPreviewItems.length} / ${pendingReceipts.length} 条` }}</span>
       </div>
 
-      <div class="console-table desktop-only">
+      <div class="console-table desktop-only ledger-window">
         <div class="console-table-scroll workbench-table-scroll">
           <table class="console-data-table dense-table workbench-data-table">
             <colgroup>
-              <col style="width: 38%" />
-              <col style="width: 28%" />
-              <col style="width: 16%" />
-              <col style="width: 18%" />
+              <col style="width: 250px" />
+              <col style="width: 180px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 140px" />
+              <col style="width: 120px" />
             </colgroup>
             <thead>
               <tr>
-                <th>物料</th>
-                <th>规格 / 供应商</th>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>供应商</th>
                 <th>请购人</th>
+                <th>区位</th>
                 <th class="align-right">待收数量</th>
               </tr>
             </thead>
@@ -311,16 +324,21 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell">
-                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
-                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
-                  </div>
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
                 </td>
                 <td class="console-data-cell v-middle">
-                  <div class="console-cell muted console-clamp-2" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                  <div class="console-cell muted console-nowrap" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
                 </td>
                 <td class="console-data-cell align-right v-middle">
-                  <span class="console-badge info">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
+                  <div class="console-cell align-right">
+                    <span class="console-badge info">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
+                  </div>
                 </td>
               </tr>
             </tbody>

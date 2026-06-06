@@ -590,25 +590,33 @@ onMounted(async () => {
           示例明细：{{ batchSummary.previewItems.join('；') || '先从左侧勾选待收货明细' }}<template v-if="batchSummary.remainingPreviewCount">；其余 {{ batchSummary.remainingPreviewCount }} 条</template>
         </p>
 
-        <div class="console-table desktop-only">
+        <div class="console-table desktop-only ledger-window">
           <div class="console-table-scroll">
             <table class="console-data-table dense-table receiving-data-table">
               <colgroup>
-                <col style="width: 64px" />
-                <col style="width: 300px" />
-                <col style="width: 200px" />
+                <col style="width: 72px" />
+                <col style="width: 250px" />
+                <col style="width: 180px" />
+                <col style="width: 180px" />
+                <col style="width: 130px" />
                 <col style="width: 150px" />
-                <col style="width: 108px" />
-                <col style="width: 108px" />
+                <col style="width: 120px" />
+                <col style="width: 120px" />
+                <col style="width: 110px" />
+                <col style="width: 110px" />
               </colgroup>
               <thead>
                 <tr>
                   <th class="console-data-head center">选择</th>
-                  <th>物料对象</th>
-                  <th>请购 / 区位</th>
-                  <th class="align-right">待收 / 已收</th>
+                  <th>物料名称</th>
+                  <th>规格</th>
+                  <th>供应商</th>
+                  <th>请购人</th>
+                  <th>区位</th>
+                  <th class="align-right">待收数量</th>
+                  <th class="align-right">已收数量</th>
                   <th class="align-right">金额</th>
-                  <th class="align-right">到货</th>
+                  <th class="align-right">到货日期</th>
                 </tr>
               </thead>
               <tbody>
@@ -640,21 +648,28 @@ onMounted(async () => {
                   <td class="console-data-cell">
                     <div class="console-cell">
                       <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                      <small class="console-subline" :title="item.specification || '未填规格'">规格：{{ item.specification || '未填规格' }}</small>
-                      <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
+                      <small class="console-subline">#{{ item.purchase_item_id }}</small>
                     </div>
                   </td>
                   <td class="console-data-cell">
-                    <div class="console-cell">
-                      <span class="muted console-clamp-2" :title="item.requester || '未填请购人'">{{ item.requester || '未填请购人' }}</span>
-                      <small class="console-subline" :title="item.location_name || '未填区位'">区位：{{ item.location_name || '未填区位' }}</small>
-                    </div>
+                    <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                  </td>
+                  <td class="console-data-cell">
+                    <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
+                  </td>
+                  <td class="console-data-cell">
+                    <div class="console-cell muted console-nowrap" :title="item.requester || '未填请购人'">{{ item.requester || '未填请购人' }}</div>
+                  </td>
+                  <td class="console-data-cell">
+                    <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
                   </td>
                   <td class="console-data-cell align-right v-middle">
                     <div class="console-cell align-right">
                       <span class="console-badge info">{{ item.pending_quantity }} {{ item.unit || '件' }}</span>
-                      <small class="console-subline">已收 {{ item.received_quantity }} {{ item.unit || '件' }}</small>
                     </div>
+                  </td>
+                  <td class="console-data-cell align-right v-middle">
+                    <div class="console-cell muted console-nowrap align-right">{{ item.received_quantity }} {{ item.unit || '件' }}</div>
                   </td>
                   <td class="console-data-cell align-right v-middle">
                     <div class="console-cell muted console-nowrap align-right" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>

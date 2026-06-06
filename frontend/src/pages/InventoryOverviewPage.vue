@@ -266,37 +266,47 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="console-table sticky-head-table desktop-only">
+      <div class="console-table sticky-head-table desktop-only ledger-window">
         <div class="console-table-scroll">
           <table class="console-data-table dense-table overview-data-table">
             <colgroup v-if="isAuthenticated">
               <col style="width: 56px" />
-              <col style="width: 300px" />
-              <col style="width: 200px" />
-              <col style="width: 116px" />
-              <col style="width: 104px" />
-              <col style="width: 112px" />
-              <col style="width: 112px" />
+              <col style="width: 250px" />
+              <col style="width: 180px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 180px" />
+              <col style="width: 130px" />
+              <col style="width: 120px" />
+              <col style="width: 120px" />
+              <col style="width: 130px" />
+              <col style="width: 130px" />
             </colgroup>
             <colgroup v-else>
-              <col style="width: 360px" />
+              <col style="width: 260px" />
+              <col style="width: 220px" />
+              <col style="width: 90px" />
               <col style="width: 120px" />
-              <col style="width: 160px" />
             </colgroup>
             <thead>
               <tr v-if="isAuthenticated">
                 <th class="console-data-head center">选中</th>
-                <th>物料对象</th>
-                <th>区位 / 项目</th>
-                <th>库存</th>
-                <th>金额</th>
-                <th>最近入库</th>
-                <th>最近出库</th>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>供应商</th>
+                <th>区位</th>
+                <th>项目</th>
+                <th>申请人</th>
+                <th class="align-right">库存</th>
+                <th class="align-right">金额</th>
+                <th class="align-right">最近入库</th>
+                <th class="align-right">最近出库</th>
               </tr>
               <tr v-else>
-                <th>物料对象</th>
+                <th>物料名称</th>
+                <th>规格</th>
                 <th>单位</th>
-                <th>库存</th>
+                <th class="align-right">库存</th>
               </tr>
             </thead>
             <tbody>
@@ -320,34 +330,42 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small class="console-subline" :title="item.specification || '未填规格'">规格：{{ item.specification || '未填规格' }}</small>
-                    <small v-if="isAuthenticated" class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填供应商' }}</small>
+                    <small class="console-subline">#{{ item.id }}</small>
                   </div>
                 </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                </td>
                 <td v-if="isAuthenticated" class="console-data-cell">
-                  <div class="console-cell">
-                    <span class="muted console-clamp-2" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</span>
-                    <small class="console-subline" :title="item.project_name || '未填项目'">项目：{{ item.project_name || '未填项目' }}</small>
-                  </div>
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
+                </td>
+                <td v-if="isAuthenticated" class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
+                </td>
+                <td v-if="isAuthenticated" class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填项目'">{{ item.project_name || '未填项目' }}</div>
+                </td>
+                <td v-if="isAuthenticated" class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.requester || '未填申请人'">{{ item.requester || '未填申请人' }}</div>
                 </td>
                 <td v-else class="console-data-cell v-middle">
                   <div class="console-cell muted console-nowrap">{{ item.unit || '件' }}</div>
                 </td>
-                <td class="console-data-cell v-middle">
+                <td class="console-data-cell align-right v-middle">
                   <div class="console-cell">
                     <span :class="['console-badge', Number(item.quantity_on_hand) <= 5 ? 'warn' : 'ok']">
                       {{ item.quantity_on_hand }} {{ item.unit || '件' }}
                     </span>
                   </div>
                 </td>
-                <td v-if="isAuthenticated" class="console-data-cell v-middle">
-                  <div class="console-cell muted console-nowrap" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
+                <td v-if="isAuthenticated" class="console-data-cell align-right v-middle">
+                  <div class="console-cell muted console-nowrap align-right" :title="formatCurrency(item.total_amount)">{{ formatCurrency(item.total_amount) }}</div>
                 </td>
-                <td v-if="isAuthenticated" class="console-data-cell v-middle">
-                  <div class="console-cell muted console-nowrap" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
+                <td v-if="isAuthenticated" class="console-data-cell align-right v-middle">
+                  <div class="console-cell muted console-nowrap align-right" :title="item.last_receipt_at || '未记录'">{{ item.last_receipt_at || '未记录' }}</div>
                 </td>
-                <td v-if="isAuthenticated" class="console-data-cell v-middle">
-                  <div class="console-cell muted console-nowrap" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
+                <td v-if="isAuthenticated" class="console-data-cell align-right v-middle">
+                  <div class="console-cell muted console-nowrap align-right" :title="item.last_issue_at || '未记录'">{{ item.last_issue_at || '未记录' }}</div>
                 </td>
               </tr>
             </tbody>

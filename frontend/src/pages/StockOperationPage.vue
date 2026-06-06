@@ -227,19 +227,25 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="console-table sticky-head-table desktop-only">
+      <div class="console-table sticky-head-table desktop-only ledger-window">
         <div class="console-table-scroll">
           <table class="console-data-table dense-table operation-pick-table">
             <colgroup>
-              <col style="width: 280px" />
-              <col style="width: 220px" />
-              <col style="width: 112px" />
-              <col style="width: 118px" />
+              <col style="width: 240px" />
+              <col style="width: 180px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 170px" />
+              <col style="width: 120px" />
+              <col style="width: 130px" />
             </colgroup>
             <thead>
               <tr>
-                <th>物料</th>
-                <th>规格 / 区位</th>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>供应商</th>
+                <th>区位</th>
+                <th>项目</th>
                 <th class="align-right">库存</th>
                 <th class="align-right">最近入库</th>
               </tr>
@@ -259,16 +265,20 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small class="console-subline" :title="item.supplier_name || '未填供应商'">供应商：{{ item.supplier_name || '未填' }}</small>
+                    <small class="console-subline">#{{ item.id }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
-                  <div class="console-cell">
-                    <span class="muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</span>
-                    <small class="console-subline" :title="`${item.location_name || '未填区位'} / ${item.project_name || '未填项目'}`">
-                      区位：{{ item.location_name || '未填区位' }} / 项目：{{ item.project_name || '未填' }}
-                    </small>
-                  </div>
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.project_name || '未填项目'">{{ item.project_name || '未填项目' }}</div>
                 </td>
                 <td class="console-data-cell align-right v-middle">
                   <div class="console-cell align-right">
