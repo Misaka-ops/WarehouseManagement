@@ -8,6 +8,8 @@ from ..auth import AuthUser, get_optional_current_user, require_authenticated_us
 from ..database import get_db
 from ..models import TransactionType
 from ..schemas import (
+    FinishedInventoryBulkDeleteRequest,
+    FinishedInventoryBulkDeleteResponse,
     FinishedInventoryDashboardResponse,
     FinishedInventoryManualCreateRequest,
     FinishedInventoryManualCreateResponse,
@@ -26,6 +28,7 @@ from ..services.bootstrap import export_warehouse_workbook, replace_inventory_fr
 from ..services.finished_inventory import (
     DuplicateFinishedInventoryItemError,
     create_finished_inventory_item,
+    delete_finished_inventory_items,
     list_finished_inventory_items,
     list_finished_inventory_transactions,
 )
@@ -78,6 +81,23 @@ def post_finished_manual_create(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return FinishedInventoryManualCreateResponse(item=item, transaction=transaction)
+
+
+@router.post("/finished-bulk-delete", response_model=FinishedInventoryBulkDeleteResponse)
+def post_finished_bulk_delete(
+    payload: FinishedInventoryBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
+    try:
+        deleted_row_ids = delete_finished_inventory_items(db, payload.row_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FinishedInventoryBulkDeleteResponse(
+        deleted_count=len(deleted_row_ids),
+        deleted_row_ids=deleted_row_ids,
+    )
 
 
 @router.get("/export-workbook")

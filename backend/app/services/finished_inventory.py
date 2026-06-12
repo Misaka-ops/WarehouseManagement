@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import (
+    FinishedInventoryExcelDeletion,
     FinishedInventoryItem as FinishedInventoryItemModel,
     FinishedInventoryTransaction as FinishedInventoryTransactionModel,
     TransactionType,
@@ -259,10 +260,12 @@ def create_finished_inventory_item(
     normalized_customer_name = normalize_text(customer_name)
     normalized_notes = normalize_text(notes)
 
+    deleted_excel_row_ids = set(session.scalars(select(FinishedInventoryExcelDeletion.row_id)).all())
     excel_duplicate = next(
         (
             row
             for row in _load_finished_rows()
+            if row.row_id not in deleted_excel_row_ids
             if _same_finished_item(
                 row,
                 material_name=normalized_material_name,
@@ -323,8 +326,47 @@ def create_finished_inventory_item(
     return _build_db_finished_item(item), _build_db_finished_transaction(transaction)
 
 
+def delete_finished_inventory_items(session: Session, row_ids: list[int]) -> list[int]:
+    normalized_row_ids = sorted(set(row_ids))
+    if not normalized_row_ids:
+        raise ValueError("No finished inventory records selected for deletion.")
+
+    db_ids = [abs(row_id) for row_id in normalized_row_ids if row_id < 0]
+    excel_row_ids = [row_id for row_id in normalized_row_ids if row_id > 0]
+    deleted_row_ids: list[int] = []
+
+    items = session.scalars(select(FinishedInventoryItemModel).where(FinishedInventoryItemModel.id.in_(db_ids))).all() if db_ids else []
+    for item in items:
+        deleted_row_ids.append(_db_row_id(item.id))
+        session.delete(item)
+
+    if excel_row_ids:
+        available_excel_row_ids = {row.row_id for row in _load_finished_rows()}
+        existing_deleted_row_ids = set(
+            session.scalars(
+                select(FinishedInventoryExcelDeletion.row_id).where(FinishedInventoryExcelDeletion.row_id.in_(excel_row_ids))
+            ).all()
+        )
+        for row_id in excel_row_ids:
+            if row_id not in available_excel_row_ids:
+                continue
+            if row_id not in existing_deleted_row_ids:
+                session.add(FinishedInventoryExcelDeletion(row_id=row_id))
+            deleted_row_ids.append(row_id)
+
+    if not deleted_row_ids:
+        raise ValueError("Selected finished inventory records were not found.")
+
+    session.commit()
+    return sorted(deleted_row_ids)
+
+
 def list_finished_inventory_items(session: Session | None = None) -> FinishedInventoryDashboardResponse:
-    items = [_build_finished_item(row) for row in _load_finished_rows()]
+    deleted_excel_row_ids: set[int] = set()
+    if session is not None:
+        deleted_excel_row_ids = set(session.scalars(select(FinishedInventoryExcelDeletion.row_id)).all())
+
+    items = [_build_finished_item(row) for row in _load_finished_rows() if row.row_id not in deleted_excel_row_ids]
     if session is not None:
         db_items = session.scalars(
             select(FinishedInventoryItemModel).order_by(
