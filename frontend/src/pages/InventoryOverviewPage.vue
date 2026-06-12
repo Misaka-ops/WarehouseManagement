@@ -6,7 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuth } from '../composables/useAuth'
 import { useFinishedInventoryWorkspace } from '../composables/useFinishedInventoryWorkspace'
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
-import { deleteInventoryItems } from '../services/api'
+import { deleteFinishedInventoryItems, deleteInventoryItems } from '../services/api'
 import type { FinishedInventoryItem, InventoryViewKind } from '../types/inventory'
 
 const route = useRoute()
@@ -38,6 +38,7 @@ const searchKeyword = ref('')
 const lowStockOnly = ref(false)
 const deleting = ref(false)
 const selectedDeleteIds = ref<number[]>([])
+const selectedFinishedDeleteRowIds = ref<number[]>([])
 const activeKind = computed<InventoryViewKind>(() => (route.query.kind === 'finished' ? 'finished' : 'raw'))
 const isFinishedView = computed(() => activeKind.value === 'finished')
 
@@ -96,6 +97,14 @@ const allFilteredSelected = computed(
   () => allFilteredIds.value.length > 0 && selectedFilteredIds.value.length === allFilteredIds.value.length,
 )
 const hasSelectedDeleteItems = computed(() => selectedDeleteIds.value.length > 0)
+const allFilteredFinishedRowIds = computed(() => filteredFinishedItems.value.map((item) => item.row_id))
+const selectedFilteredFinishedRowIds = computed(() =>
+  allFilteredFinishedRowIds.value.filter((rowId) => selectedFinishedDeleteRowIds.value.includes(rowId)),
+)
+const allFilteredFinishedSelected = computed(
+  () => allFilteredFinishedRowIds.value.length > 0 && selectedFilteredFinishedRowIds.value.length === allFilteredFinishedRowIds.value.length,
+)
+const hasSelectedFinishedDeleteItems = computed(() => selectedFinishedDeleteRowIds.value.length > 0)
 const routeItemId = computed(() => {
   const queryId = Number(route.query.itemId)
   return Number.isFinite(queryId) && queryId > 0 ? queryId : null
@@ -119,8 +128,8 @@ const selectedOverviewNextStep = computed(() => {
 const currentFilteredCount = computed(() => (isFinishedView.value ? filteredFinishedItems.value.length : filteredItems.value.length))
 const currentTotalCount = computed(() => (isFinishedView.value ? finishedItems.value.length : inventoryItems.value.length))
 
-function formatFinishedRecordLabel(item: FinishedInventoryItem) {
-  return item.row_id < 0 ? `DB 记录 #${Math.abs(item.row_id)}` : `Excel 行 #${item.row_id}`
+function canCleanFinishedItem(item: FinishedInventoryItem) {
+  return item.row_id !== 0
 }
 
 function formatCurrency(value?: string | number | null) {
@@ -154,6 +163,24 @@ function toggleSelectAllFiltered() {
   selectedDeleteIds.value = [...new Set([...selectedDeleteIds.value, ...allFilteredIds.value])]
 }
 
+function toggleFinishedItemSelection(rowId: number) {
+  if (selectedFinishedDeleteRowIds.value.includes(rowId)) {
+    selectedFinishedDeleteRowIds.value = selectedFinishedDeleteRowIds.value.filter((id) => id !== rowId)
+    return
+  }
+
+  selectedFinishedDeleteRowIds.value = [...selectedFinishedDeleteRowIds.value, rowId]
+}
+
+function toggleSelectAllFilteredFinished() {
+  if (allFilteredFinishedSelected.value) {
+    selectedFinishedDeleteRowIds.value = selectedFinishedDeleteRowIds.value.filter((id) => !allFilteredFinishedRowIds.value.includes(id))
+    return
+  }
+
+  selectedFinishedDeleteRowIds.value = [...new Set([...selectedFinishedDeleteRowIds.value, ...allFilteredFinishedRowIds.value])]
+}
+
 async function handleBulkDelete() {
   if (!selectedDeleteIds.value.length) {
     ElMessage.warning('请先勾选要删除的库存项目。')
@@ -182,6 +209,40 @@ async function handleBulkDelete() {
     ElMessage.success(`已删除 ${response.deleted_count} 个库存项目。`)
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除库存失败'
+    ElMessage.error(message)
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function handleFinishedBulkDelete() {
+  if (!selectedFinishedDeleteRowIds.value.length) {
+    ElMessage.warning('请先勾选要清理的成品记录。')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `将清理 ${selectedFinishedDeleteRowIds.value.length} 个成品台账记录。DB 记录会被删除，Excel 来源行只会在数据库中标记为已清理，不会修改 Excel 文件。此操作仅建议在开发阶段使用。`,
+      '确认清理成品测试数据',
+      {
+        confirmButtonText: '确认清理',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    const response = await deleteFinishedInventoryItems(selectedFinishedDeleteRowIds.value)
+    selectedFinishedDeleteRowIds.value = selectedFinishedDeleteRowIds.value.filter((id) => !response.deleted_row_ids.includes(id))
+    await loadFinishedDashboard()
+    ElMessage.success(`已清理 ${response.deleted_count} 个成品记录。`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '清理成品记录失败'
     ElMessage.error(message)
   } finally {
     deleting.value = false
@@ -220,6 +281,11 @@ watch(inventoryItems, (items) => {
   const currentIds = new Set(items.map((item) => item.id))
   selectedDeleteIds.value = selectedDeleteIds.value.filter((id) => currentIds.has(id))
   void syncRouteSelection()
+})
+
+watch(finishedItems, (items) => {
+  const currentRowIds = new Set(items.map((item) => item.row_id))
+  selectedFinishedDeleteRowIds.value = selectedFinishedDeleteRowIds.value.filter((id) => currentRowIds.has(id))
 })
 
 watch(
@@ -412,7 +478,6 @@ onMounted(async () => {
           <RouterLink v-else class="action-link ghost" to="/inventory-manual">登录后手动录入</RouterLink>
         </div>
       </div>
-
       <div v-if="isFinishedView" class="console-table sticky-head-table desktop-only ledger-window">
         <div class="console-table-scroll">
           <table class="console-data-table dense-table finished-overview-data-table">
@@ -464,7 +529,6 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small v-if="isAuthenticated" class="console-subline">{{ formatFinishedRecordLabel(item) }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
@@ -571,7 +635,6 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small class="console-subline">#{{ item.id }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
@@ -636,6 +699,15 @@ onMounted(async () => {
             @keydown.enter.prevent="selectFinishedInventoryItem(item)"
             @keydown.space.prevent="selectFinishedInventoryItem(item)"
           >
+            <label v-if="isAuthenticated && canCleanFinishedItem(item)" class="checkbox-chip mobile-select-chip" @click.stop>
+              <input
+                :checked="selectedFinishedDeleteRowIds.includes(item.row_id)"
+                type="checkbox"
+                @change="toggleFinishedItemSelection(item.row_id)"
+              />
+              <span>勾选清理</span>
+            </label>
+
             <div class="data-row-main">
               <div class="data-row-head">
                 <strong>{{ item.material_name }}</strong>
@@ -722,6 +794,25 @@ onMounted(async () => {
         </div>
 
         <p class="field-hint dev-note">这里会一并删除库存流水和关联收货关系，正常作业请使用上方台账与作业入口。</p>
+      </details>
+
+      <details v-if="isFinishedView && isAuthenticated" class="test-tools-panel workbench-dev-panel">
+        <summary>开发测试清理 <small>{{ selectedFinishedDeleteRowIds.length }} 项已勾选</small></summary>
+        <div class="selection-toolbar selection-toolbar-inline">
+          <label class="checkbox-chip">
+            <input :checked="allFilteredFinishedSelected" type="checkbox" @change="toggleSelectAllFilteredFinished" />
+            <span>全选当前筛选结果</span>
+          </label>
+
+          <div class="selection-actions">
+            <span>只改数据库，不动 Excel 文件</span>
+            <button class="danger-button" :disabled="deleting || !hasSelectedFinishedDeleteItems" type="button" @click="handleFinishedBulkDelete">
+              {{ deleting ? '清理中...' : '清理勾选成品' }}
+            </button>
+          </div>
+        </div>
+
+        <p class="field-hint dev-note">DB 记录会被删除并清理流水；Excel 来源行会写入数据库删除标记，台账不再展示，Excel 文件本身保持不变。</p>
       </details>
     </section>
 

@@ -485,20 +485,61 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page-stack purchase-receiving-task-page">
-    <div class="content-grid">
-      <section class="page-section purchase-receiving-list-section">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">采购收货</p>
-            <h3>{{ receiveMode === 'single' ? '先选待收货明细，再确认单条入库' : '先圈定待收货范围，再统一批量入库' }}</h3>
-          </div>
-          <span class="section-meta">
-            {{ pendingReceiptsLoading ? '加载中' : `${filteredPendingReceipts.length} / ${scopedPendingReceipts.length} 条待收货` }}
-          </span>
+  <div class="page-stack">
+    <section class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">采购收货</p>
+          <h3>先确认待收货对象，再执行收货入库</h3>
+        </div>
+        <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `${scopedPendingReceipts.length} / ${pendingReceipts.length} 条待收货` }}</span>
+      </div>
+
+      <div class="status-strip workflow-strip">
+        <div>
+          <span>当前模式</span>
+          <strong>{{ receiveMode === 'batch' ? '批量收货' : '单条收货' }}</strong>
+        </div>
+        <div>
+          <span>当前对象</span>
+          <strong>{{ receiveMode === 'batch' ? `${selectedItemIds.length} 条待收货` : selectedPendingReceipt?.material_name || '未选择' }}</strong>
+        </div>
+        <div>
+          <span>执行规则</span>
+          <strong>{{ receiveMode === 'batch' ? '按待收数量一次收货' : '允许按到货数量部分收货' }}</strong>
+        </div>
+      </div>
+
+      <div class="inline-summary-row">
+        <span>库存项目 <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong></span>
+        <span>库存总量 <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong></span>
+        <span>待处理采购 <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong></span>
+      </div>
+
+      <div v-if="scopedPurchaseItemIds.length" class="selection-toolbar business-toolbar receiving-scope-toolbar">
+        <div class="selection-status">
+          <span>当前范围</span>
+          <strong>{{ scopeTitle }}</strong>
+          <small>{{ scopeDescription }}</small>
         </div>
 
-        <div class="segment-switch receiving-mode-switch">
+        <div class="selection-actions">
+          <RouterLink class="action-link ghost" to="/purchase-receiving">查看全部待收货</RouterLink>
+        </div>
+      </div>
+    </section>
+
+    <div class="content-grid">
+      <section class="page-section">
+        <div class="section-heading">
+        <div>
+          <p class="section-kicker">待收货列表</p>
+          <h3>{{ receiveMode === 'single' ? '单条确认收货' : '批量选择待收货明细' }}</h3>
+        </div>
+        <span class="section-meta">{{ filteredPendingReceipts.length }} / {{ scopedPendingReceipts.length }}</span>
+      </div>
+
+        <div class="segment-switch">
           <button class="segment-chip" :class="{ active: receiveMode === 'single' }" type="button" @click="switchReceiveMode('single')">
             单条收货
           </button>
@@ -507,7 +548,7 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div class="toolbar-grid compact-toolbar receiving-filter-toolbar">
+        <div class="toolbar-grid compact-toolbar">
           <label class="field">
             <span>搜索待收货</span>
             <input v-model="searchKeyword" type="text" placeholder="按物料、规格、供应商、请购人、区位搜索" />
@@ -521,43 +562,6 @@ onMounted(async () => {
           >
             {{ locationMissingOnly ? '当前只看未填区位' : '只看未填区位' }}
           </button>
-        </div>
-
-        <div class="status-strip workflow-strip receiving-context-strip">
-          <div>
-            <span>当前范围</span>
-            <strong>{{ scopedPurchaseItemIds.length ? scopeTitle : '全部待收货' }}</strong>
-            <small>
-              {{
-                scopedPurchaseItemIds.length
-                  ? scopeDescription
-                  : '当前可查看全部待收货，并继续按关键词或区位状态筛选。'
-              }}
-            </small>
-          </div>
-          <div>
-            <span>当前处理对象</span>
-            <strong>{{ receiveMode === 'batch' ? `${selectedItemIds.length} 条待收货` : selectedPendingReceipt?.material_name || '未选择' }}</strong>
-            <small>
-              {{
-                receiveMode === 'batch'
-                  ? '批量模式仅对当前勾选明细生效。'
-                  : selectedPendingReceipt ? `采购明细 #${selectedPendingReceipt.purchase_item_id}` : '从列表点击一条待收货明细开始。'
-              }}
-            </small>
-          </div>
-          <div>
-            <span>执行规则</span>
-            <strong>{{ receiveMode === 'batch' ? '按待收数量一次收货' : '允许按到货数量部分收货' }}</strong>
-            <small>{{ receiveMode === 'batch' ? '确认后逐条入库，并保留统一日期与可选覆盖字段。' : '数量不可超过当前待收数量。' }}</small>
-          </div>
-        </div>
-
-        <div class="inline-summary-row receiving-workspace-row">
-          <span>库存项目 <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong></span>
-          <span>库存总量 <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong></span>
-          <span>待处理采购 <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong></span>
-          <RouterLink v-if="scopedPurchaseItemIds.length" class="action-link ghost" to="/purchase-receiving">查看全部待收货</RouterLink>
         </div>
 
         <div v-if="receiveMode === 'batch'" class="selection-toolbar">
@@ -739,7 +743,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <details v-if="receiveMode === 'batch'" class="test-tools-panel receiving-maintenance-panel">
+        <details v-if="receiveMode === 'batch'" class="test-tools-panel">
           <summary>开发测试清理 <small>{{ selectedItemIds.length }} 项已勾选</small></summary>
           <div class="selection-toolbar selection-toolbar-inline">
             <div class="selection-status">
@@ -757,10 +761,10 @@ onMounted(async () => {
         </details>
       </section>
 
-      <section class="page-section purchase-receiving-form-section">
+      <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">执行收货</p>
+            <p class="section-kicker">收货表单</p>
             <h3>
               {{
                 receiveMode === 'batch'
@@ -774,54 +778,40 @@ onMounted(async () => {
 
         <div class="receipt-summary emphasis-summary">
           <template v-if="receiveMode === 'batch'">
-            <div class="inline-summary-row receiving-form-inline-summary">
-              <span>已勾选 <strong>{{ batchSummary.itemCount }} 条</strong></span>
-              <span>待收总量 <strong>{{ batchSummary.totalQuantity }}</strong></span>
-              <span>
-                涉及供应商
-                <strong>
-                  {{ batchSummary.supplierSummary }}<template v-if="batchSummary.supplierCount > 2"> 等 {{ batchSummary.supplierCount }} 个</template>
-                </strong>
-              </span>
-              <span>统一区位 <strong>{{ receiptForm.location_name || '沿用原区位' }}</strong></span>
-            </div>
-            <p class="field-hint receiving-form-note">
-              示例明细：{{ batchSummary.previewItems.join('；') || '先从左侧勾选待收货明细' }}<template v-if="batchSummary.remainingPreviewCount">；其余 {{ batchSummary.remainingPreviewCount }} 条</template>
-            </p>
+            <p>已勾选明细：{{ batchSummary.itemCount }} 条</p>
+            <p>待收总量：{{ batchSummary.totalQuantity }}</p>
+            <p>本次规则：每条明细按当前待收数量一次性收货</p>
+            <p>涉及供应商：{{ batchSummary.supplierSummary }}<template v-if="batchSummary.supplierCount > 2"> 等 {{ batchSummary.supplierCount }} 个</template></p>
+            <p>统一供应商：{{ receiptForm.supplier_name || '本次未统一填写，将沿用各明细原供应商' }}</p>
+            <p>统一区位：{{ receiptForm.location_name || '本次未统一填写，将沿用原区位' }}</p>
+            <p>示例明细：{{ batchSummary.previewItems.join('；') || '先从左侧勾选待收货明细' }}<template v-if="batchSummary.remainingPreviewCount">；其余 {{ batchSummary.remainingPreviewCount }} 条</template></p>
+            <p>说明：点击确认后会先弹出最终影响范围确认，再开始批量入库。</p>
           </template>
           <template v-else>
-            <div class="inline-summary-row receiving-form-inline-summary">
-              <span>供应商 <strong>{{ receiptForm.supplier_name || selectedPendingReceipt?.supplier_name || '未填' }}</strong></span>
-              <span>请购人 <strong>{{ selectedPendingReceipt?.requester || '未填' }}</strong></span>
-              <span>当前区位 <strong>{{ selectedPendingReceipt?.location_name || '未填' }}</strong></span>
-              <span>
-                已收 / 待收
-                <strong>{{ selectedPendingReceipt?.received_quantity || '0' }} / {{ selectedPendingReceipt?.pending_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</strong>
-              </span>
-            </div>
-            <div class="inline-summary-row receiving-form-inline-summary">
-              <span>物品编号 <strong>{{ receiptForm.item_code || selectedPendingReceipt?.item_code || '未填' }}</strong></span>
-              <span>本次金额 <strong>{{ formatCurrency(receiptForm.total_amount) }}</strong></span>
-              <span>
-                请购数量
-                <strong>{{ selectedPendingReceipt?.requested_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</strong>
-              </span>
-            </div>
+            <p>供应商：{{ receiptForm.supplier_name || selectedPendingReceipt?.supplier_name || '未填' }}</p>
+            <p>请购人：{{ selectedPendingReceipt?.requester || '未填' }}</p>
+            <p>物品编号：{{ receiptForm.item_code || selectedPendingReceipt?.item_code || '未填' }}</p>
+            <p>当前区位：{{ selectedPendingReceipt?.location_name || '未填' }}</p>
+            <p>本次金额：{{ formatCurrency(receiptForm.total_amount) }}</p>
+            <p>请购数量：{{ selectedPendingReceipt?.requested_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
+            <p>已收 / 待收：{{ selectedPendingReceipt?.received_quantity || '0' }} / {{ selectedPendingReceipt?.pending_quantity || '-' }} {{ selectedPendingReceipt?.unit || '件' }}</p>
           </template>
         </div>
 
         <form class="form-stack" @submit.prevent="submitPurchaseReceipt">
-          <div class="toolbar-grid dual receiving-form-grid">
+          <div class="toolbar-grid dual">
             <label v-if="receiveMode === 'single'" class="field">
               <span>本次收货数量</span>
               <input v-model.number="receiptForm.quantity" min="0.01" step="0.01" type="number" inputmode="decimal" />
               <small v-if="singleQuantityError" class="field-hint danger">{{ singleQuantityError }}</small>
+              <small v-else class="field-hint">可按部分到货数量收货，不能超过待收数量。</small>
             </label>
 
             <label v-if="receiveMode === 'single'" class="field">
               <span>本次金额</span>
               <input v-model.number="receiptForm.total_amount" min="0" step="0.01" type="number" inputmode="decimal" placeholder="例如 128.50" />
               <small v-if="amountError" class="field-hint danger">{{ amountError }}</small>
+              <small v-else class="field-hint">默认按采购明细金额带入，可手动修正。</small>
             </label>
 
             <label class="field">
@@ -831,10 +821,15 @@ onMounted(async () => {
             </label>
           </div>
 
-          <div class="toolbar-grid dual receiving-form-grid">
+          <p v-if="receiveMode === 'batch'" class="field-hint">
+            批量模式会按采购明细金额比例自动带入；如需逐条修正金额，请切回单条模式确认收货。
+          </p>
+
+          <div class="toolbar-grid dual">
             <label v-if="receiveMode === 'single'" class="field">
               <span>物品编号</span>
               <input v-model="receiptForm.item_code" type="text" placeholder="例如 SKU-20260606-01" />
+              <small class="field-hint">只写入库存主档，不参与当前收货匹配。</small>
             </label>
 
             <label class="field">
@@ -844,6 +839,9 @@ onMounted(async () => {
                 type="text"
                 :placeholder="receiveMode === 'batch' ? '留空则沿用各明细原供应商' : '例如 深圳某某电子'"
               />
+              <small class="field-hint">
+                {{ receiveMode === 'batch' ? '可统一覆盖本次勾选明细的供应商。' : '默认带入采购明细供应商，可按实际到货修改。' }}
+              </small>
             </label>
 
             <label class="field">
@@ -852,17 +850,17 @@ onMounted(async () => {
             </label>
           </div>
 
-          <div class="toolbar-grid dual receiving-form-grid">
+          <div class="toolbar-grid dual">
             <label class="field">
               <span>操作人</span>
               <input v-model="receiptForm.operator_name" type="text" placeholder="仓管员" />
             </label>
-
-            <label class="field">
-              <span>入库单号</span>
-              <input v-model="receiptForm.reference_code" type="text" placeholder="例如 RK-PO-20260530-01" />
-            </label>
           </div>
+
+          <label class="field">
+            <span>入库单号</span>
+            <input v-model="receiptForm.reference_code" type="text" placeholder="例如 RK-PO-20260530-01" />
+          </label>
 
           <label class="field">
             <span>备注</span>
