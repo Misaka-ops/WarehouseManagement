@@ -417,7 +417,7 @@ onMounted(async () => {
             </article>
             <article class="note-card warm-note">
               <strong>飞书同步</strong>
-              <p>使用后端已配置的飞书采购审批编码拉取审批实例，先预览物品列表，确认后才加入待收货。</p>
+              <p>使用系统设置中的飞书配置拉取审批实例，先预览物品列表，确认后才加入待收货。</p>
               <label class="field compact-field">
                 <span>同步范围</span>
                 <select v-model.number="feishuTimeRangeDays">

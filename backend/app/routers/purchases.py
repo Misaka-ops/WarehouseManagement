@@ -235,9 +235,10 @@ def pull_feishu_instance(payload: FeishuInstancePullRequest, db: Session = Depen
 def get_feishu_definition(
     approval_code: str | None = None,
     locale: str = Query(default="zh-CN"),
+    db: Session = Depends(get_db),
 ):
     try:
-        return get_feishu_approval_definition(approval_code, locale=locale)
+        return get_feishu_approval_definition(db, approval_code, locale=locale)
     except FeishuIntegrationError as exc:
         raise HTTPException(status_code=_feishu_http_status(str(exc)), detail=str(exc)) from exc
 

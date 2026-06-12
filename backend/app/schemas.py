@@ -29,6 +29,18 @@ class AuthLoginResponse(BaseModel):
     user: AuthUserRead
 
 
+class FeishuSettingsRead(BaseModel):
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    feishu_purchase_approval_code: str | None = None
+
+
+class FeishuSettingsUpdateRequest(BaseModel):
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    feishu_purchase_approval_code: str | None = None
+
+
 class InventorySummary(BaseModel):
     total_items: int
     total_stock_quantity: Decimal
@@ -116,6 +128,15 @@ class FinishedInventoryManualCreateRequest(BaseModel):
 class FinishedInventoryManualCreateResponse(BaseModel):
     item: FinishedInventoryItemRead
     transaction: FinishedInventoryTransactionRead
+
+
+class FinishedInventoryBulkDeleteRequest(BaseModel):
+    row_ids: list[int] = Field(min_length=1)
+
+
+class FinishedInventoryBulkDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_row_ids: list[int]
 
 
 class InventoryImportResponse(BaseModel):

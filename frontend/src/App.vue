@@ -60,6 +60,10 @@ const navGroups: NavGroup[] = [
       { to: '/inventory-export', kicker: '导出', label: '库存导出', requiresAuth: true },
     ],
   },
+  {
+    title: '系统设置',
+    items: [{ to: '/settings/feishu', kicker: '飞书', label: '飞书配置', requiresAuth: true }],
+  },
 ]
 
 const visibleNavGroups = computed(() =>

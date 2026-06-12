@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import auth, inventory, purchases
+from .routers import auth, inventory, purchases, settings as settings_router
 from .services.bootstrap import create_schema
 
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(inventory.router, prefix=settings.api_prefix)
 app.include_router(purchases.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(settings_router.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")

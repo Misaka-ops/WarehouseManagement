@@ -7,6 +7,7 @@ import ManualInventoryPage from './pages/ManualInventoryPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import PurchaseImportPage from './pages/PurchaseImportPage.vue'
 import PurchaseReceivingPage from './pages/PurchaseReceivingPage.vue'
+import SettingsFeishuPage from './pages/SettingsFeishuPage.vue'
 import StockOperationPage from './pages/StockOperationPage.vue'
 import WorkbenchPage from './pages/WorkbenchPage.vue'
 import { useAuth } from './composables/useAuth'
@@ -166,6 +167,23 @@ const router = createRouter({
         statusLabel: '采购准备',
         shortcuts: [
           { label: '采购收货', to: '/purchase-receiving', tone: 'primary' },
+          { label: '库存台账', to: '/overview', tone: 'ghost' },
+        ],
+      },
+    },
+    {
+      path: '/settings/feishu',
+      component: SettingsFeishuPage,
+      meta: {
+        requiresAuth: true,
+        eyebrow: '系统设置',
+        title: '飞书配置',
+        description: '维护飞书采购同步所需的 App 凭证与审批编码。',
+        module: '系统设置',
+        guide: '保存后下一次飞书同步会直接使用这里的配置。',
+        statusLabel: '配置维护',
+        shortcuts: [
+          { label: '采购导入', to: '/purchase-import', tone: 'primary' },
           { label: '库存台账', to: '/overview', tone: 'ghost' },
         ],
       },

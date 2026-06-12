@@ -5,10 +5,12 @@ import type {
   AuthLoginResponse,
   AuthSessionResponse,
   DashboardResponse,
+  FeishuSettings,
   FeishuPurchasePreviewResponse,
   FeishuPurchaseSyncRequest,
   FeishuPurchaseImportResponse,
   FinishedDashboardResponse,
+  FinishedInventoryBulkDeleteResponse,
   FinishedInventoryManualCreatePayload,
   FinishedInventoryManualCreateResponse,
   FinishedInventoryTransaction,
@@ -72,6 +74,16 @@ export async function fetchAuthSession() {
   return data
 }
 
+export async function fetchFeishuSettings() {
+  const { data } = await api.get<FeishuSettings>('/settings/feishu')
+  return data
+}
+
+export async function updateFeishuSettings(payload: FeishuSettings) {
+  const { data } = await api.put<FeishuSettings>('/settings/feishu', payload)
+  return data
+}
+
 export async function fetchDashboard() {
   const { data } = await api.get<DashboardResponse>('/inventory/dashboard')
   return data
@@ -114,6 +126,11 @@ export async function fetchFinishedItemTransactions(rowId: number) {
 
 export async function deleteInventoryItems(itemIds: number[]) {
   const { data } = await api.post<InventoryBulkDeleteResponse>('/inventory/bulk-delete', { item_ids: itemIds })
+  return data
+}
+
+export async function deleteFinishedInventoryItems(rowIds: number[]) {
+  const { data } = await api.post<FinishedInventoryBulkDeleteResponse>('/inventory/finished-bulk-delete', { row_ids: rowIds })
   return data
 }
 

@@ -40,6 +40,7 @@ from ..schemas import (
     FeishuPurchaseSyncResponse,
 )
 from .bootstrap import normalize_text, to_date
+from .system_settings import get_feishu_runtime_settings
 
 
 class FeishuIntegrationError(RuntimeError):
@@ -54,7 +55,8 @@ class FeishuPage:
 
 
 class FeishuClient:
-    def __init__(self) -> None:
+    def __init__(self, session: Session) -> None:
+        self.session = session
         self.settings = get_settings()
         self._tenant_access_token: str | None = None
 
@@ -140,8 +142,9 @@ class FeishuClient:
         if self._tenant_access_token:
             return self._tenant_access_token
 
-        app_id = normalize_text(self.settings.feishu_app_id)
-        app_secret = normalize_text(self.settings.feishu_app_secret)
+        runtime_settings = get_feishu_runtime_settings(self.session)
+        app_id = normalize_text(runtime_settings.feishu_app_id)
+        app_secret = normalize_text(runtime_settings.feishu_app_secret)
         if not app_id or not app_secret:
             raise FeishuIntegrationError("缺少飞书 App ID 或 App Secret。")
 
@@ -753,16 +756,17 @@ def serialize_feishu_sync_state(state: FeishuApprovalSyncState) -> FeishuApprova
 
 
 def get_feishu_approval_definition(
+    session: Session,
     approval_code: str | None = None,
     *,
     locale: str = "zh-CN",
 ) -> FeishuApprovalDefinitionRead:
-    settings = get_settings()
-    resolved_code = _normalize_code(approval_code) or _normalize_code(settings.feishu_purchase_approval_code)
+    runtime_settings = get_feishu_runtime_settings(session)
+    resolved_code = _normalize_code(approval_code) or _normalize_code(runtime_settings.feishu_purchase_approval_code)
     if not resolved_code:
         raise FeishuIntegrationError("请先配置飞书采购审批编码，或传入 approval_code。")
 
-    client = FeishuClient()
+    client = FeishuClient(session)
     payload = client.get_approval_definition(resolved_code, locale=locale)
     return FeishuApprovalDefinitionRead(
         approval_code=resolved_code,
@@ -807,8 +811,8 @@ def sync_feishu_purchase_instances(
     session: Session,
     payload: FeishuPurchaseSyncRequest,
 ) -> FeishuPurchaseSyncResponse:
-    settings = get_settings()
-    approval_code = _normalize_code(payload.approval_code) or _normalize_code(settings.feishu_purchase_approval_code)
+    runtime_settings = get_feishu_runtime_settings(session)
+    approval_code = _normalize_code(payload.approval_code) or _normalize_code(runtime_settings.feishu_purchase_approval_code)
     if not approval_code:
         raise FeishuIntegrationError("请先配置飞书采购审批编码，或在请求体中传入 approval_code。")
 
@@ -817,7 +821,7 @@ def sync_feishu_purchase_instances(
     if purged_detached_count:
         warnings.append(f"已自动清理 {purged_detached_count} 条脱离库存关联的历史飞书采购记录。")
 
-    client = FeishuClient()
+    client = FeishuClient(session)
     client.tenant_access_token
     instance_codes: list[str] = []
     start_time, end_time = _resolve_time_window(payload.time_range_days)
@@ -1179,8 +1183,8 @@ def pull_feishu_instance_by_code(
     session: Session,
     payload: FeishuInstancePullRequest,
 ) -> FeishuApprovalInstanceRecordRead:
-    settings = get_settings()
-    approval_code = _normalize_code(payload.approval_code) or _normalize_code(settings.feishu_purchase_approval_code)
+    runtime_settings = get_feishu_runtime_settings(session)
+    approval_code = _normalize_code(payload.approval_code) or _normalize_code(runtime_settings.feishu_purchase_approval_code)
     if not approval_code:
         raise FeishuIntegrationError("请先配置飞书采购审批编码，或在请求体中传入 approval_code。")
 
@@ -1188,7 +1192,7 @@ def pull_feishu_instance_by_code(
     if not instance_code:
         raise FeishuIntegrationError("instance_code 不能为空。")
 
-    client = FeishuClient()
+    client = FeishuClient(session)
     detail_payload = client.get_approval_instance(instance_code, locale=payload.locale)
     record, _ = _upsert_instance_record(session, approval_code, detail_payload)
     session.commit()

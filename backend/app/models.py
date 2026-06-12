@@ -95,6 +95,21 @@ class FinishedInventoryItem(TimestampMixin, Base):
     transactions: Mapped[list[FinishedInventoryTransaction]] = relationship(back_populates="item", cascade="all, delete-orphan")
 
 
+class FinishedInventoryExcelDeletion(TimestampMixin, Base):
+    __tablename__ = "finished_inventory_excel_deletions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    row_id: Mapped[int] = mapped_column(unique=True, index=True)
+
+
+class SystemSetting(TimestampMixin, Base):
+    __tablename__ = "system_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    value: Mapped[str | None] = mapped_column(Text)
+
+
 class PurchaseOrder(TimestampMixin, Base):
     __tablename__ = "purchase_orders"
 

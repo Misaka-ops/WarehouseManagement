@@ -30,6 +30,12 @@ export interface AuthLoginResponse {
   user: AuthUser
 }
 
+export interface FeishuSettings {
+  feishu_app_id: string | null
+  feishu_app_secret: string | null
+  feishu_purchase_approval_code: string | null
+}
+
 export interface InventoryItem {
   id: number
   requester: string | null
@@ -108,6 +114,11 @@ export interface FinishedInventoryManualCreatePayload {
 export interface FinishedInventoryManualCreateResponse {
   item: FinishedInventoryItem
   transaction: FinishedInventoryTransaction
+}
+
+export interface FinishedInventoryBulkDeleteResponse {
+  deleted_count: number
+  deleted_row_ids: number[]
 }
 
 export interface InventoryImportResponse {
