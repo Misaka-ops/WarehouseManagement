@@ -3,16 +3,25 @@ import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
+import { useFinishedInventoryWorkspace } from '../composables/useFinishedInventoryWorkspace'
 import { useInventoryWorkspace } from '../composables/useInventoryWorkspace'
-import { upsertInventoryItem } from '../services/api'
-import type { InventoryItem, InventoryManualUpsertPayload } from '../types/inventory'
+import { createFinishedInventoryItem, upsertInventoryItem } from '../services/api'
+import type { FinishedInventoryItem, FinishedInventoryManualCreatePayload, InventoryItem, InventoryManualUpsertPayload } from '../types/inventory'
 
 const { inventoryItems, loadDashboard } = useInventoryWorkspace()
+const { inventoryItems: finishedInventoryItems, loadDashboard: loadFinishedDashboard } = useFinishedInventoryWorkspace()
+
+const warehouseLocationOptions = ['A-1', 'A-2', 'A-3', 'B-1', 'B-2', 'B-3', 'C-1', 'C-2', 'C-3', '成品区'] as const
+
+type WarehouseLocationOption = (typeof warehouseLocationOptions)[number]
+type ManualInventoryForm = InventoryManualUpsertPayload &
+  Pick<FinishedInventoryManualCreatePayload, 'work_order_no' | 'project_code' | 'producer_name' | 'customer_name'>
 
 const submitting = ref(false)
 const selectedCandidateId = ref<number | null>(null)
+const selectedFinishedCandidateRowId = ref<number | null>(null)
 
-const form = ref<InventoryManualUpsertPayload>({
+const form = ref<ManualInventoryForm>({
   requester: '',
   purchase_category: '',
   project_name: '',
@@ -29,11 +38,30 @@ const form = ref<InventoryManualUpsertPayload>({
   reference_code: 'MAN-',
   item_notes: '',
   transaction_notes: '',
+  work_order_no: '',
+  project_code: '',
+  producer_name: '',
+  customer_name: '',
 })
 
 function normalizeText(value?: string | null) {
   const trimmed = value?.trim()
   return trimmed ? trimmed : null
+}
+
+function resolveLocationOption(value?: string | null): WarehouseLocationOption | '' {
+  const normalized = normalizeText(value)
+  if (!normalized) {
+    return ''
+  }
+  return warehouseLocationOptions.includes(normalized as WarehouseLocationOption) ? (normalized as WarehouseLocationOption) : ''
+}
+
+function formatFinishedRecordLabel(item: FinishedInventoryItem | null | undefined) {
+  if (!item) {
+    return ''
+  }
+  return item.row_id < 0 ? `数据库记录 #${Math.abs(item.row_id)}` : `Excel 行 #${item.row_id}`
 }
 
 function resetTransactionFields() {
@@ -53,7 +81,7 @@ function fillFormFromItem(item: InventoryItem) {
   form.value.specification = item.specification ?? ''
   form.value.unit = item.unit ?? ''
   form.value.supplier_name = item.supplier_name ?? ''
-  form.value.location_name = item.location_name ?? ''
+  form.value.location_name = resolveLocationOption(item.location_name)
   form.value.item_notes = item.notes ?? ''
   if (!(form.value.reference_code ?? '').trim()) {
     form.value.reference_code = 'MAN-'
@@ -99,6 +127,11 @@ const normalizedRequester = computed(() => normalizeText(form.value.requester))
 const normalizedCategory = computed(() => normalizeText(form.value.purchase_category))
 const normalizedProject = computed(() => normalizeText(form.value.project_name))
 const normalizedItemCode = computed(() => normalizeText(form.value.item_code))
+const normalizedWorkOrderNo = computed(() => normalizeText(form.value.work_order_no))
+const normalizedProjectCode = computed(() => normalizeText(form.value.project_code))
+const normalizedProducerName = computed(() => normalizeText(form.value.producer_name))
+const normalizedCustomerName = computed(() => normalizeText(form.value.customer_name))
+const isFinishedLocation = computed(() => normalizedLocation.value === '成品区')
 const quantityError = computed(() => (Number(form.value.quantity || 0) > 0 ? '' : '数量必须大于 0。'))
 const amountError = computed(() => {
   const amount = form.value.total_amount
@@ -121,6 +154,22 @@ const exactMatch = computed(() => {
         normalizeText(item.specification) === normalizedSpecification.value &&
         normalizeText(item.unit) === normalizedUnit.value &&
         normalizeText(item.supplier_name) === normalizedSupplier.value &&
+        normalizeText(item.location_name) === normalizedLocation.value,
+    ) ?? null
+  )
+})
+
+const finishedExactMatch = computed<FinishedInventoryItem | null>(() => {
+  if (!isFinishedLocation.value || !normalizedMaterial.value) {
+    return null
+  }
+
+  return (
+    finishedInventoryItems.value.find(
+      (item) =>
+        item.material_name === normalizedMaterial.value &&
+        normalizeText(item.specification) === normalizedSpecification.value &&
+        normalizeText(item.unit) === normalizedUnit.value &&
         normalizeText(item.location_name) === normalizedLocation.value,
     ) ?? null
   )
@@ -156,6 +205,15 @@ const projectedTotalAmount = computed(() => {
 })
 
 const previewStatus = computed(() => {
+  if (isFinishedLocation.value) {
+    if (finishedExactMatch.value) {
+      return `成品区已有相同成品，${formatFinishedRecordLabel(finishedExactMatch.value)}，请调整后再提交。`
+    }
+    if (!normalizedMaterial.value) {
+      return '先输入成品名称，系统会检查成品台账中是否已有相同记录。'
+    }
+    return '未找到相同成品，提交后会写入成品台账。'
+  }
   if (exactMatch.value) {
     return `将补到现有库存 #${exactMatch.value.id}`
   }
@@ -164,6 +222,52 @@ const previewStatus = computed(() => {
   }
   return '未找到完全匹配项，提交后会自动新建库存记录。'
 })
+
+async function submitFinishedForm(materialName: string) {
+  if (!normalizedLocation.value) {
+    ElMessage.warning('请先选择区位。')
+    return
+  }
+
+  if (finishedExactMatch.value) {
+    selectedFinishedCandidateRowId.value = finishedExactMatch.value.row_id
+    ElMessage.warning(`成品区已有相同成品，${formatFinishedRecordLabel(finishedExactMatch.value)}。`)
+    return
+  }
+
+  submitting.value = true
+
+  try {
+    const response = await createFinishedInventoryItem({
+      material_name: materialName,
+      specification: normalizedSpecification.value,
+      unit: normalizedUnit.value,
+      location_name: normalizedLocation.value,
+      quantity: Number(form.value.quantity),
+      occurred_on: form.value.occurred_on,
+      work_order_no: normalizedWorkOrderNo.value,
+      project_code: normalizedProjectCode.value,
+      producer_name: normalizedProducerName.value,
+      customer_name: normalizedCustomerName.value,
+      notes: normalizeText(form.value.item_notes) ?? normalizeText(form.value.transaction_notes),
+    })
+
+    await loadFinishedDashboard({ quiet: true })
+    selectedFinishedCandidateRowId.value = response.item.row_id
+    resetTransactionFields()
+
+    ElMessage.success(`已写入成品台账，${formatFinishedRecordLabel(response.item)}。`)
+  } catch (error) {
+    const message = axios.isAxiosError(error)
+      ? (error.response?.data?.detail as string | undefined) || error.message || '提交失败'
+      : error instanceof Error
+        ? error.message
+        : '提交失败'
+    ElMessage.error(message)
+  } finally {
+    submitting.value = false
+  }
+}
 
 async function submitForm() {
   const materialName = normalizedMaterial.value
@@ -174,6 +278,16 @@ async function submitForm() {
 
   if (quantityError.value) {
     ElMessage.warning(quantityError.value)
+    return
+  }
+
+  if (!normalizedLocation.value) {
+    ElMessage.warning('请先选择区位。')
+    return
+  }
+
+  if (isFinishedLocation.value) {
+    await submitFinishedForm(materialName)
     return
   }
 
@@ -222,7 +336,7 @@ async function submitForm() {
 }
 
 onMounted(async () => {
-  await loadDashboard()
+  await Promise.all([loadDashboard(), loadFinishedDashboard()])
 })
 </script>
 
@@ -238,7 +352,11 @@ onMounted(async () => {
       </div>
 
       <p class="section-copy tight">
-        系统会用“物料名称、规格型号、单位、供应商、区位”来判断是否补到现有库存。物品编号和库存项说明不会参与匹配；采购类别、项目和申请人只用于业务归属。
+        {{
+          isFinishedLocation
+            ? '成品区会写入成品台账数据库。系统会用“物料名称、规格型号、单位、库位”检查是否已有相同成品，命中后会提示并阻止重复录入。'
+            : '系统会用“物料名称、规格型号、单位、供应商、区位”来判断是否补到现有库存。物品编号和库存项说明不会参与匹配；采购类别、项目和申请人只用于业务归属。'
+        }}
       </p>
 
       <div class="status-strip workflow-strip">
@@ -252,7 +370,7 @@ onMounted(async () => {
         </div>
         <div>
           <span>步骤 3</span>
-          <strong>确认是否新建库存</strong>
+          <strong>{{ isFinishedLocation ? '确认是否重复' : '确认是否新建库存' }}</strong>
         </div>
       </div>
 
@@ -283,11 +401,14 @@ onMounted(async () => {
 
             <label class="field">
               <span>区位</span>
-              <input v-model.trim="form.location_name" type="text" placeholder="例如 A-01-03" />
+              <select v-model="form.location_name">
+                <option disabled value="">请选择区位</option>
+                <option v-for="location in warehouseLocationOptions" :key="location" :value="location">{{ location }}</option>
+              </select>
             </label>
           </div>
 
-          <div class="manual-form-grid">
+          <div v-if="!isFinishedLocation" class="manual-form-grid">
             <label class="field">
               <span>物品编号</span>
               <input v-model.trim="form.item_code" type="text" placeholder="例如 SKU-20260606-01" />
@@ -305,9 +426,36 @@ onMounted(async () => {
               <small class="field-hint">保存到库存主档，不参与合并匹配。</small>
             </label>
           </div>
+
+          <div v-else class="manual-form-grid">
+            <label class="field">
+              <span>工单号</span>
+              <input v-model.trim="form.work_order_no" type="text" placeholder="例如 WO-20260612-01" />
+            </label>
+
+            <label class="field">
+              <span>项目号</span>
+              <input v-model.trim="form.project_code" type="text" placeholder="例如 PJ-2026-001" />
+            </label>
+
+            <label class="field">
+              <span>生产抬头或供应商</span>
+              <input v-model.trim="form.producer_name" type="text" placeholder="例如 柔微超材料" />
+            </label>
+
+            <label class="field">
+              <span>客户名称</span>
+              <input v-model.trim="form.customer_name" type="text" placeholder="例如 北京某某科技" />
+            </label>
+
+            <label class="field">
+              <span>成品备注</span>
+              <input v-model.trim="form.item_notes" type="text" placeholder="写入成品台账备注" />
+            </label>
+          </div>
         </section>
 
-        <section class="subsection-panel">
+        <section v-if="!isFinishedLocation" class="subsection-panel">
           <div class="subsection-heading">
             <p>业务归属</p>
             <span>不参与库存合并，只用于后续追踪</span>
@@ -336,7 +484,7 @@ onMounted(async () => {
         <section class="subsection-panel">
           <div class="subsection-heading">
             <p>本次入库</p>
-            <span>本次动作会写入库存流水</span>
+            <span>{{ isFinishedLocation ? '本次动作会写入成品台账数据库' : '本次动作会写入库存流水' }}</span>
           </div>
 
           <div class="manual-form-grid">
@@ -346,7 +494,7 @@ onMounted(async () => {
               <small v-if="quantityError" class="field-hint danger">{{ quantityError }}</small>
             </label>
 
-            <label class="field">
+            <label v-if="!isFinishedLocation" class="field">
               <span>金额</span>
               <input v-model.number="form.total_amount" min="0" step="0.01" type="number" inputmode="decimal" placeholder="例如 128.50" />
               <small v-if="amountError" class="field-hint danger">{{ amountError }}</small>
@@ -359,7 +507,7 @@ onMounted(async () => {
             </label>
           </div>
 
-          <div class="manual-form-grid">
+          <div v-if="!isFinishedLocation" class="manual-form-grid">
             <label class="field">
               <span>操作人</span>
               <input v-model.trim="form.operator_name" type="text" placeholder="例如 仓管员" />
@@ -371,7 +519,7 @@ onMounted(async () => {
             </label>
           </div>
 
-          <label class="field">
+          <label v-if="!isFinishedLocation" class="field">
             <span>本次入库说明</span>
             <textarea
               v-model.trim="form.transaction_notes"
@@ -383,7 +531,7 @@ onMounted(async () => {
         </section>
 
         <button class="primary-button" type="submit" :disabled="submitting">
-          {{ submitting ? '提交中...' : '确认手动录入' }}
+          {{ submitting ? '提交中...' : isFinishedLocation ? '确认录入成品区' : '确认手动录入' }}
         </button>
       </form>
     </section>
@@ -393,12 +541,14 @@ onMounted(async () => {
         <div class="section-heading">
           <div>
             <p class="section-kicker">匹配预览</p>
-            <h3>先确认会不会合并到已有库存</h3>
+            <h3>{{ isFinishedLocation ? '先确认成品区是否已有相同记录' : '先确认会不会合并到已有库存' }}</h3>
           </div>
-          <span class="section-meta">{{ exactMatch ? `库存 #${exactMatch.id}` : '将新建' }}</span>
+          <span class="section-meta">
+            {{ isFinishedLocation ? (finishedExactMatch ? formatFinishedRecordLabel(finishedExactMatch) : '将写入成品台账') : exactMatch ? `库存 #${exactMatch.id}` : '将新建' }}
+          </span>
         </div>
 
-        <div class="receipt-summary emphasis-summary">
+        <div v-if="!isFinishedLocation" class="receipt-summary emphasis-summary">
           <p>{{ previewStatus }}</p>
           <p>当前库存：{{ exactMatch?.quantity_on_hand ?? 0 }} {{ exactMatch?.unit || form.unit || '件' }}</p>
           <p>提交后预计：{{ projectedQuantity }} {{ exactMatch?.unit || form.unit || '件' }}</p>
@@ -411,6 +561,20 @@ onMounted(async () => {
           <p>物品编号仅保存到库存主档，不参与系统合并匹配</p>
         </div>
 
+        <div v-else class="receipt-summary emphasis-summary">
+          <p>{{ previewStatus }}</p>
+          <p>现有记录：{{ formatFinishedRecordLabel(finishedExactMatch) || '未命中' }}</p>
+          <p>库位：{{ normalizedLocation || '未选择' }}</p>
+          <p>提交数量：{{ form.quantity }} {{ normalizedUnit || '件' }}</p>
+          <p>入库日期：{{ form.occurred_on || '未选择' }}</p>
+          <p>工单号：{{ normalizedWorkOrderNo || '未填写' }}</p>
+          <p>项目号：{{ normalizedProjectCode || '未填写' }}</p>
+          <p>生产抬头或供应商：{{ normalizedProducerName || '未填写' }}</p>
+          <p>客户名称：{{ normalizedCustomerName || '未填写' }}</p>
+          <p>备注：{{ form.item_notes?.trim() || '未填写' }}</p>
+          <p>成品匹配字段：物料名称、规格型号、单位、库位</p>
+        </div>
+
         <div class="status-strip manual-status">
           <div>
             <span>物料</span>
@@ -421,12 +585,12 @@ onMounted(async () => {
             <strong>{{ normalizedUnit || '--' }}</strong>
           </div>
           <div>
-            <span>编号</span>
-            <strong>{{ normalizedItemCode || exactMatch?.item_code || '--' }}</strong>
+            <span>{{ isFinishedLocation ? '工单' : '编号' }}</span>
+            <strong>{{ isFinishedLocation ? normalizedWorkOrderNo || '--' : normalizedItemCode || exactMatch?.item_code || '--' }}</strong>
           </div>
           <div>
-            <span>供应商</span>
-            <strong>{{ normalizedSupplier || '--' }}</strong>
+            <span>{{ isFinishedLocation ? '项目' : '供应商' }}</span>
+            <strong>{{ isFinishedLocation ? normalizedProjectCode || '--' : normalizedSupplier || '--' }}</strong>
           </div>
           <div>
             <span>区位</span>
@@ -435,7 +599,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="page-section">
+      <section v-if="!isFinishedLocation" class="page-section">
         <div class="section-heading">
           <div>
             <p class="section-kicker">候选库存</p>
@@ -483,6 +647,51 @@ onMounted(async () => {
 
           <div v-if="!relatedItems.length" class="console-empty">还没有可参考的库存项。</div>
         </div>
+      </section>
+
+      <section v-else class="page-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">成品查重</p>
+            <h3>相同记录会阻止重复录入</h3>
+          </div>
+          <span class="section-meta">{{ finishedExactMatch ? '已命中' : '未命中' }}</span>
+        </div>
+
+        <div v-if="finishedExactMatch" class="console-table">
+          <div class="console-table-scroll">
+            <div class="console-table-header manual-candidate-table-grid">
+              <span class="console-header-cell">物料</span>
+              <span class="console-header-cell">规格</span>
+              <span class="console-header-cell">单位</span>
+              <span class="console-header-cell">库位</span>
+              <span class="console-header-cell align-right">库存</span>
+              <span class="console-header-cell">来源</span>
+            </div>
+
+            <article
+              class="console-table-row manual-candidate-table-grid interactive"
+              :class="{ active: finishedExactMatch.row_id === selectedFinishedCandidateRowId }"
+            >
+              <div class="console-cell">
+                <strong class="console-clamp-2" :title="finishedExactMatch.material_name">{{ finishedExactMatch.material_name }}</strong>
+              </div>
+              <div class="console-cell muted console-clamp-2" :title="finishedExactMatch.specification || '未填规格'">
+                {{ finishedExactMatch.specification || '未填规格' }}
+              </div>
+              <div class="console-cell muted console-nowrap" :title="finishedExactMatch.unit || '件'">{{ finishedExactMatch.unit || '件' }}</div>
+              <div class="console-cell muted console-clamp-2" :title="finishedExactMatch.location_name || '未填库位'">
+                {{ finishedExactMatch.location_name || '未填库位' }}
+              </div>
+              <div class="console-cell align-right">
+                <span class="console-badge info">{{ finishedExactMatch.quantity_on_hand }} {{ finishedExactMatch.unit || '件' }}</span>
+              </div>
+              <div class="console-cell muted console-nowrap">{{ formatFinishedRecordLabel(finishedExactMatch) }}</div>
+            </article>
+          </div>
+        </div>
+
+        <div v-else class="console-empty">当前成品区没有相同物料、规格、单位和库位的记录。</div>
       </section>
     </div>
   </div>

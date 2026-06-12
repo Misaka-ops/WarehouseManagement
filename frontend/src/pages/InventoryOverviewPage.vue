@@ -111,13 +111,17 @@ const selectedOverviewName = computed(() =>
 )
 const selectedOverviewNextStep = computed(() => {
   if (isFinishedView.value) {
-    return selectedFinishedItem.value ? '查看派生流水并核对收发记录' : '先在下方成品台账中锁定对象'
+    return selectedFinishedItem.value ? '查看流水并核对收发记录' : '先在下方成品台账中锁定对象'
   }
 
   return selectedItem.value ? (isAuthenticated.value ? '查看流水或发起入库 / 出库' : '可继续筛选并核对库存') : '先在下方台账中锁定对象'
 })
 const currentFilteredCount = computed(() => (isFinishedView.value ? filteredFinishedItems.value.length : filteredItems.value.length))
 const currentTotalCount = computed(() => (isFinishedView.value ? finishedItems.value.length : inventoryItems.value.length))
+
+function formatFinishedRecordLabel(item: FinishedInventoryItem) {
+  return item.row_id < 0 ? `DB 记录 #${Math.abs(item.row_id)}` : `Excel 行 #${item.row_id}`
+}
 
 function formatCurrency(value?: string | number | null) {
   if (value == null || value === '') {
@@ -280,7 +284,7 @@ onMounted(async () => {
         </article>
         <article v-if="isFinishedView" class="metric-card accent">
           <span>当前口径</span>
-          <strong>成品只读</strong>
+          <strong>成品台账</strong>
         </article>
         <article v-else-if="isAuthenticated" class="metric-card accent">
           <span>待处理采购</span>
@@ -336,13 +340,13 @@ onMounted(async () => {
             {{
               selectedFinishedItem
                 ? `库存 ${selectedFinishedItem.quantity_on_hand} ${selectedFinishedItem.unit || '件'} / 库位 ${selectedFinishedItem.location_name || '未填'} / 客户 ${selectedFinishedItem.customer_name || '未填'}`
-                : '当前成品口径为只读模式，可继续搜索、筛选并查看派生流水。'
+                : '当前成品口径包含历史 Excel 数据和手动录入的数据库记录。'
             }}
           </small>
         </div>
 
         <div class="selection-actions">
-          <span class="action-link ghost disabled">成品视图暂不开放直接入库</span>
+          <RouterLink class="action-link ghost" to="/inventory-manual">手动录入成品</RouterLink>
           <span class="action-link secondary disabled">成品视图暂不开放直接出库</span>
         </div>
       </div>
@@ -350,12 +354,12 @@ onMounted(async () => {
       <div v-else-if="isFinishedView" class="selection-toolbar business-toolbar">
         <div class="selection-status">
           <span>游客权限</span>
-          <strong>{{ selectedFinishedItem?.material_name || '当前开放成品台账只读查询' }}</strong>
+          <strong>{{ selectedFinishedItem?.material_name || '当前开放成品台账查询' }}</strong>
           <small>
             {{
               selectedFinishedItem
                 ? `规格 ${selectedFinishedItem.specification || '未填'} / 库存 ${selectedFinishedItem.quantity_on_hand} ${selectedFinishedItem.unit || '件'}`
-                : '游客模式下仅展示物料名称、规格和库存，可继续筛选并核对派生流水。'
+                : '游客模式下仅展示物料名称、规格和库存，可继续筛选并核对流水。'
             }}
           </small>
         </div>
@@ -393,11 +397,11 @@ onMounted(async () => {
       <div v-else class="selection-toolbar business-toolbar">
         <div class="selection-status">
           <span>游客权限</span>
-          <strong>{{ isFinishedView ? '当前开放成品台账与派生流水只读查询' : '当前仅开放库存台账基础查询' }}</strong>
+          <strong>{{ isFinishedView ? '当前开放成品台账与流水查询' : '当前仅开放库存台账基础查询' }}</strong>
           <small>
             {{
               isFinishedView
-                ? '成品视图当前为只读模式，登录不会解锁额外作业入口。'
+                ? '登录后可通过手动录入把成品写入数据库台账。'
                 : '登录后可查看金额、供应商、流水，并执行入库、出库、导入导出等操作。'
             }}
           </small>
@@ -405,7 +409,7 @@ onMounted(async () => {
 
         <div class="selection-actions">
           <RouterLink v-if="!isFinishedView" class="action-link primary" to="/login">管理员登录</RouterLink>
-          <span v-else class="action-link ghost disabled">成品视图当前仅供核对</span>
+          <RouterLink v-else class="action-link ghost" to="/inventory-manual">登录后手动录入</RouterLink>
         </div>
       </div>
 
@@ -460,7 +464,7 @@ onMounted(async () => {
                 <td class="console-data-cell">
                   <div class="console-cell">
                     <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    <small v-if="isAuthenticated" class="console-subline">Excel 行 #{{ item.row_id }}</small>
+                    <small v-if="isAuthenticated" class="console-subline">{{ formatFinishedRecordLabel(item) }}</small>
                   </div>
                 </td>
                 <td class="console-data-cell">
@@ -724,12 +728,12 @@ onMounted(async () => {
     <section v-if="isFinishedView || isAuthenticated" class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">{{ isFinishedView ? '派生流水' : '流水' }}</p>
+          <p class="section-kicker">流水</p>
           <h3>
             {{
               isFinishedView
                 ? selectedFinishedItem
-                  ? '由成品库存清单派生的最近记录'
+                  ? '当前成品的最近记录'
                   : '先从上方选择一个成品'
                 : selectedItem
                   ? '最近 12 条记录'
@@ -756,9 +760,9 @@ onMounted(async () => {
       </div>
 
       <div v-else class="receipt-summary emphasis-summary">
-        <p>当前为成品库存清单的只读视图，流水由 Excel 中的入库 / 出库字段派生。</p>
-        <p>入库记录来自“入库日期 + 入库数量”；出库记录来自三组“出库数量 / 出库时间 / 领用人”。</p>
-        <p>本阶段不在这里执行成品收发作业，只用于查询和核对。</p>
+        <p>当前为成品台账视图，包含历史 Excel 数据和手动录入的数据库记录。</p>
+        <p>Excel 记录的流水由入库 / 出库字段派生；数据库记录的流水来自手动录入。</p>
+        <p>本阶段开放手动录入成品入库，成品出库仍只用于查询和核对。</p>
       </div>
 
       <div class="console-table desktop-only">
@@ -792,8 +796,8 @@ onMounted(async () => {
           </article>
         </div>
 
-        <div v-if="isFinishedView && finishedHistoryLoading" class="console-empty">正在加载成品派生流水...</div>
-        <div v-else-if="isFinishedView && !selectedFinishedItem" class="console-empty">请先从上方成品台账中选择一个对象，再查看派生流水。</div>
+        <div v-if="isFinishedView && finishedHistoryLoading" class="console-empty">正在加载成品流水...</div>
+        <div v-else-if="isFinishedView && !selectedFinishedItem" class="console-empty">请先从上方成品台账中选择一个对象，再查看流水。</div>
         <div v-else-if="isFinishedView && !finishedTransactions.length" class="console-empty">当前成品对象还没有可派生的收发记录。</div>
         <div v-else-if="!isFinishedView && historyLoading" class="console-empty">正在加载流水...</div>
         <div v-else-if="!isFinishedView && !selectedItem" class="console-empty">请先从上方台账中选择一个物料，再查看最近流水。</div>
@@ -823,8 +827,8 @@ onMounted(async () => {
             </div>
           </article>
 
-          <div v-if="isFinishedView && finishedHistoryLoading" class="empty-state">正在加载成品派生流水...</div>
-          <div v-else-if="isFinishedView && !selectedFinishedItem" class="empty-state">请先从上方成品台账中选择一个对象，再查看派生流水。</div>
+          <div v-if="isFinishedView && finishedHistoryLoading" class="empty-state">正在加载成品流水...</div>
+          <div v-else-if="isFinishedView && !selectedFinishedItem" class="empty-state">请先从上方成品台账中选择一个对象，再查看流水。</div>
           <div v-else-if="isFinishedView && !finishedTransactions.length" class="empty-state">当前成品对象还没有可派生的收发记录。</div>
           <div v-else-if="!isFinishedView && historyLoading" class="empty-state">正在加载流水...</div>
           <div v-else-if="!isFinishedView && !selectedItem" class="empty-state">请先从上方台账中选择一个物料，再查看最近流水。</div>

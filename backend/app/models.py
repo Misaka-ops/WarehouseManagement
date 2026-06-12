@@ -74,6 +74,27 @@ class InventoryItem(TimestampMixin, Base):
     purchase_items: Mapped[list[PurchaseOrderItem]] = relationship(back_populates="inventory_item")
 
 
+class FinishedInventoryItem(TimestampMixin, Base):
+    __tablename__ = "finished_inventory_items"
+    __table_args__ = (UniqueConstraint("material_name", "specification", "unit", "location_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    material_name: Mapped[str] = mapped_column(String(200), index=True)
+    specification: Mapped[str | None] = mapped_column(String(255))
+    work_order_no: Mapped[str | None] = mapped_column(String(120))
+    quantity_on_hand: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    unit: Mapped[str | None] = mapped_column(String(40))
+    location_name: Mapped[str | None] = mapped_column(String(120), index=True)
+    project_code: Mapped[str | None] = mapped_column(String(120))
+    producer_name: Mapped[str | None] = mapped_column(String(120))
+    customer_name: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+    last_receipt_at: Mapped[date | None] = mapped_column(Date)
+    last_issue_at: Mapped[date | None] = mapped_column(Date)
+
+    transactions: Mapped[list[FinishedInventoryTransaction]] = relationship(back_populates="item", cascade="all, delete-orphan")
+
+
 class PurchaseOrder(TimestampMixin, Base):
     __tablename__ = "purchase_orders"
 
@@ -198,3 +219,16 @@ class InventoryTransaction(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     item: Mapped[InventoryItem] = relationship(back_populates="transactions")
+
+
+class FinishedInventoryTransaction(TimestampMixin, Base):
+    __tablename__ = "finished_inventory_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("finished_inventory_items.id"), index=True)
+    transaction_type: Mapped[TransactionType] = mapped_column(SqlEnum(TransactionType))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    occurred_on: Mapped[date] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    item: Mapped[FinishedInventoryItem] = relationship(back_populates="transactions")

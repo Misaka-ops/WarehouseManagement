@@ -9,6 +9,8 @@ from ..database import get_db
 from ..models import TransactionType
 from ..schemas import (
     FinishedInventoryDashboardResponse,
+    FinishedInventoryManualCreateRequest,
+    FinishedInventoryManualCreateResponse,
     FinishedInventoryTransactionRead,
     InventoryBulkDeleteRequest,
     InventoryBulkDeleteResponse,
@@ -21,7 +23,12 @@ from ..schemas import (
     InventoryTransactionRead,
 )
 from ..services.bootstrap import export_warehouse_workbook, replace_inventory_from_warehouse_workbook
-from ..services.finished_inventory import list_finished_inventory_items, list_finished_inventory_transactions
+from ..services.finished_inventory import (
+    DuplicateFinishedInventoryItemError,
+    create_finished_inventory_item,
+    list_finished_inventory_items,
+    list_finished_inventory_transactions,
+)
 from ..services.inventory import build_dashboard, create_transaction, delete_inventory_items, list_item_transactions, upsert_inventory_item
 
 
@@ -37,21 +44,40 @@ def get_dashboard(
 
 
 @router.get("/finished-dashboard", response_model=FinishedInventoryDashboardResponse)
-def get_finished_dashboard():
+def get_finished_dashboard(db: Session = Depends(get_db)):
     try:
-        return list_finished_inventory_items()
+        return list_finished_inventory_items(db)
     except KeyError as exc:
         raise HTTPException(status_code=500, detail="Warehouse workbook is missing the '成品库存清单' sheet.") from exc
 
 
 @router.get("/finished-items/{row_id}/transactions", response_model=list[FinishedInventoryTransactionRead])
-def get_finished_item_transactions(row_id: int):
+def get_finished_item_transactions(row_id: int, db: Session = Depends(get_db)):
     try:
-        return list_finished_inventory_transactions(row_id)
+        return list_finished_inventory_transactions(row_id, db)
     except KeyError as exc:
         raise HTTPException(status_code=500, detail="Warehouse workbook is missing the '成品库存清单' sheet.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/finished-manual-create", response_model=FinishedInventoryManualCreateResponse, status_code=201)
+def post_finished_manual_create(
+    payload: FinishedInventoryManualCreateRequest,
+    db: Session = Depends(get_db),
+    _current_user: AuthUser = Depends(require_authenticated_user),
+):
+    try:
+        item, transaction = create_finished_inventory_item(db, **payload.model_dump())
+    except KeyError as exc:
+        raise HTTPException(status_code=500, detail="Warehouse workbook is missing the '成品库存清单' sheet.") from exc
+    except DuplicateFinishedInventoryItemError as exc:
+        duplicate_label = f"数据库记录 #{abs(exc.row_id)}" if exc.row_id < 0 else f"Excel 行号 {exc.row_id}"
+        raise HTTPException(status_code=409, detail=f"成品区已有相同成品，{duplicate_label}。") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FinishedInventoryManualCreateResponse(item=item, transaction=transaction)
 
 
 @router.get("/export-workbook")

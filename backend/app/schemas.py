@@ -99,6 +99,25 @@ class FinishedInventoryTransactionRead(BaseModel):
     notes: str | None = None
 
 
+class FinishedInventoryManualCreateRequest(BaseModel):
+    material_name: str
+    specification: str | None = None
+    unit: str | None = None
+    location_name: str
+    quantity: Decimal = Field(gt=0)
+    occurred_on: date
+    work_order_no: str | None = None
+    project_code: str | None = None
+    producer_name: str | None = None
+    customer_name: str | None = None
+    notes: str | None = None
+
+
+class FinishedInventoryManualCreateResponse(BaseModel):
+    item: FinishedInventoryItemRead
+    transaction: FinishedInventoryTransactionRead
+
+
 class InventoryImportResponse(BaseModel):
     workbook_name: str
     imported_item_count: int

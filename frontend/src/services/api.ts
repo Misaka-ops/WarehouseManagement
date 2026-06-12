@@ -9,6 +9,8 @@ import type {
   FeishuPurchaseSyncRequest,
   FeishuPurchaseImportResponse,
   FinishedDashboardResponse,
+  FinishedInventoryManualCreatePayload,
+  FinishedInventoryManualCreateResponse,
   FinishedInventoryTransaction,
   InventoryBulkDeleteResponse,
   InventoryImportResponse,
@@ -92,6 +94,11 @@ export async function postIssue(payload: InventoryTransactionPayload) {
 
 export async function upsertInventoryItem(payload: InventoryManualUpsertPayload) {
   const { data } = await api.post<InventoryManualUpsertResponse>('/inventory/manual-upsert', payload)
+  return data
+}
+
+export async function createFinishedInventoryItem(payload: FinishedInventoryManualCreatePayload) {
+  const { data } = await api.post<FinishedInventoryManualCreateResponse>('/inventory/finished-manual-create', payload)
   return data
 }
 

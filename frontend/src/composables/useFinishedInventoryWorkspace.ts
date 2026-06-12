@@ -74,7 +74,7 @@ export function useFinishedInventoryWorkspace() {
       itemTransactions.value = await fetchFinishedItemTransactions(rowId)
     } catch (error) {
       itemTransactions.value = []
-      const message = resolveFinishedInventoryErrorMessage(error, '成品派生流水加载失败。')
+      const message = resolveFinishedInventoryErrorMessage(error, '成品流水加载失败。')
       ElMessage.error(message)
     } finally {
       historyLoading.value = false

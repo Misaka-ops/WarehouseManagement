@@ -91,6 +91,25 @@ export interface FinishedInventoryTransaction {
   notes: string | null
 }
 
+export interface FinishedInventoryManualCreatePayload {
+  material_name: string
+  specification?: string | null
+  unit?: string | null
+  location_name: string
+  quantity: number
+  occurred_on: string
+  work_order_no?: string | null
+  project_code?: string | null
+  producer_name?: string | null
+  customer_name?: string | null
+  notes?: string | null
+}
+
+export interface FinishedInventoryManualCreateResponse {
+  item: FinishedInventoryItem
+  transaction: FinishedInventoryTransaction
+}
+
 export interface InventoryImportResponse {
   workbook_name: string
   imported_item_count: number
