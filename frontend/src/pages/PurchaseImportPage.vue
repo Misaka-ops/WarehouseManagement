@@ -324,42 +324,25 @@ onMounted(async () => {
 
 <template>
   <div class="page-stack">
-    <section class="page-section hero-section">
+    <section class="page-section hero-section purchase-import-task-page">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">采购增量导入</p>
-          <h3>按上次行号之后的内容导入采购清单</h3>
+          <p class="section-kicker">采购导入</p>
+          <h3>确认行号后，直接选择本次导入入口</h3>
         </div>
-        <span class="section-meta">支持本地上传采购 Excel，并记录每个工作表的最新导入行号</span>
+        <span class="section-meta">单主流程</span>
       </div>
 
-      <p class="section-copy">
-        当前导入策略是增量导入。系统会记住每个采购工作表上次导入到哪一行，下次只导入后续新增内容；如果你需要回退或重跑，也可以手工修改这个行号。
-      </p>
-
-      <div class="status-strip workflow-strip">
-        <div>
-          <span>步骤 1</span>
-          <strong>确认导入行号</strong>
-        </div>
-        <div>
-          <span>步骤 2</span>
-          <strong>上传 Excel 或同步飞书</strong>
-        </div>
-        <div>
-          <span>步骤 3</span>
-          <strong>预览后转入采购收货</strong>
-        </div>
-      </div>
+      <p class="section-copy tight">系统会按每个工作表上次导入行号继续增量读取。需要重跑时，只改行号，再从 Excel 或飞书进入本次导入。</p>
 
       <div class="metric-grid compact">
-        <article class="metric-card">
-          <span>当前库存项目</span>
-          <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong>
-        </article>
         <article class="metric-card accent">
           <span>待处理采购</span>
           <strong>{{ dashboard?.summary.pending_purchase_orders ?? '--' }}</strong>
+        </article>
+        <article class="metric-card">
+          <span>当前库存项目</span>
+          <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong>
         </article>
       </div>
     </section>
@@ -368,11 +351,13 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">导入状态</p>
-            <h3>先确认每个工作表的行号</h3>
+            <p class="section-kicker">步骤 1</p>
+            <h3>确认行号</h3>
           </div>
-          <span class="section-meta">用户可手工修改</span>
+          <span class="section-meta">支持手工修正</span>
         </div>
+
+        <p class="section-copy tight">下次导入会从这些行号之后开始读取；要回退范围，先改这里。</p>
 
         <div class="import-notes">
           <article v-for="state in states" :key="state.sheet_name" class="note-card">
@@ -396,28 +381,42 @@ onMounted(async () => {
       <section class="page-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">上传采购表单</p>
-            <h3>执行本次增量导入</h3>
+            <p class="section-kicker">步骤 2</p>
+            <h3>选择本次导入入口</h3>
           </div>
-          <span class="section-meta">支持 `Sheet1` 和 `佳时坤`</span>
+          <span class="section-meta">Excel / 飞书并列入口</span>
         </div>
 
-        <div class="import-panel">
-          <label class="upload-dropzone">
-            <input accept=".xlsx,.xlsm,.xltx,.xltm" class="upload-input" type="file" @change="handleFileChange" />
-            <span class="upload-kicker">Purchase Upload</span>
-            <strong>{{ fileLabel }}</strong>
-            <p>上传后会按当前记录的上次导入行号，只导入新增采购行。</p>
-          </label>
+        <p class="section-copy tight">两个入口都会沿用当前行号范围。Excel 适合本地采购表，飞书会先拉预览再确认导入。</p>
 
-          <div class="import-notes compact-notes">
+        <div class="content-grid">
+          <div class="import-panel">
+            <label class="upload-dropzone">
+              <input accept=".xlsx,.xlsm,.xltx,.xltm" class="upload-input" type="file" @change="handleFileChange" />
+              <span class="upload-kicker">Excel Import</span>
+              <strong>{{ fileLabel }}</strong>
+              <p>上传后只读取当前行号之后的新采购行。</p>
+            </label>
+
+            <div class="selection-toolbar selection-toolbar-inline">
+              <div class="selection-status">
+                <span>本地导入</span>
+                <strong>按当前增量范围读取采购 Excel</strong>
+                <small>支持 `Sheet1` 和 `佳时坤`。</small>
+              </div>
+            </div>
+
+            <div class="link-row">
+              <button class="primary-button" :disabled="importing || !selectedFile" type="button" @click="submitImport">
+                {{ importing ? '导入中...' : '开始采购增量导入' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="import-panel">
             <article class="note-card warm-note">
-              <strong>匹配规则</strong>
-              <p>当前系统默认按“物料名称 + 规格型号”精确匹配；如果不稳妥，可在下方人工对齐库存项。</p>
-            </article>
-            <article class="note-card warm-note">
-              <strong>飞书同步</strong>
-              <p>使用系统设置中的飞书配置拉取审批实例，先预览物品列表，确认后才加入待收货。</p>
+              <strong>飞书采购同步</strong>
+              <p>先抓取审批实例并预览物品，再确认哪些采购单加入待收货。</p>
               <label class="field compact-field">
                 <span>同步范围</span>
                 <select v-model.number="feishuTimeRangeDays">
@@ -427,60 +426,93 @@ onMounted(async () => {
                 </select>
               </label>
             </article>
-          </div>
 
-          <div class="link-row">
-            <button class="primary-button" :disabled="importing || !selectedFile" type="button" @click="submitImport">
-              {{ importing ? '导入中...' : '开始采购增量导入' }}
-            </button>
-            <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
-              {{ syncingFeishu ? '同步中...' : '同步并预览飞书采购申请' }}
-            </button>
-            <RouterLink class="action-link ghost" :to="{ path: '/purchase-receiving', query: latestReceivingRouteQuery }">
-              {{ importResult?.imported_items?.length ? '去处理本次导入待收货' : '去看采购收货' }}
-            </RouterLink>
+            <div class="selection-toolbar selection-toolbar-inline">
+              <div class="selection-status">
+                <span>飞书入口</span>
+                <strong>预览后再确认导入采购收货</strong>
+                <small>会保留不可导入实例并给出原因。</small>
+              </div>
+            </div>
+
+            <div class="link-row">
+              <button class="action-link secondary" :disabled="syncingFeishu" type="button" @click="syncFeishuImport">
+                {{ syncingFeishu ? '同步中...' : '同步并预览飞书采购申请' }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
     </div>
 
-    <section v-if="importResult" class="page-section">
+    <section v-if="importResult || feishuSyncResult" class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">最近一次结果</p>
-          <h3>{{ importResult.workbook_name }}</h3>
+          <p class="section-kicker">步骤 3</p>
+          <h3>最近结果与后续动作</h3>
         </div>
-        <span class="section-meta">未匹配库存项：{{ importResult.unmatched_item_count }}</span>
+        <span class="section-meta">
+          {{ importResult ? `未匹配库存项：${importResult.unmatched_item_count}` : `审批编码：${feishuSyncResult?.approval_code}` }}
+        </span>
       </div>
 
       <div class="metric-grid compact">
-        <article class="metric-card">
-          <span>导入采购单</span>
-          <strong>{{ importResult.imported_order_count }}</strong>
-        </article>
-        <article class="metric-card">
-          <span>导入采购明细</span>
-          <strong>{{ importResult.imported_item_count }}</strong>
-        </article>
-        <article class="metric-card danger">
-          <span>未匹配库存项</span>
-          <strong>{{ importResult.unmatched_item_count }}</strong>
-        </article>
+        <template v-if="importResult">
+          <article class="metric-card">
+            <span>导入采购单</span>
+            <strong>{{ importResult.imported_order_count }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>导入采购明细</span>
+            <strong>{{ importResult.imported_item_count }}</strong>
+          </article>
+          <article class="metric-card danger">
+            <span>未匹配库存项</span>
+            <strong>{{ importResult.unmatched_item_count }}</strong>
+          </article>
+        </template>
+        <template v-else>
+          <article class="metric-card">
+            <span>导入采购单</span>
+            <strong>{{ feishuSyncResult?.imported_order_count ?? 0 }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>导入采购明细</span>
+            <strong>{{ feishuSyncResult?.imported_item_count ?? 0 }}</strong>
+          </article>
+          <article class="metric-card accent">
+            <span>抓取实例</span>
+            <strong>{{ feishuSyncResult?.fetched_instance_count ?? 0 }}</strong>
+          </article>
+        </template>
       </div>
 
       <div class="selection-toolbar business-toolbar import-context-toolbar">
         <div class="selection-status">
           <span>下一步</span>
-          <strong>带着本次导入范围进入采购收货</strong>
-          <small>进入后默认只看这次导入的 {{ importResult.imported_item_count }} 条待收货，避免在全部列表里重新查找。</small>
+          <strong>{{ importResult ? '带着本次导入范围进入采购收货' : '继续转入采购收货核对待收货' }}</strong>
+          <small v-if="importResult">进入后默认只看这次导入的 {{ importResult.imported_item_count }} 条待收货，避免在全部列表里重新查找。</small>
+          <small v-else>飞书采购已经转入待收货后，可以继续回采购收货完成核对与入库。</small>
         </div>
 
         <div class="selection-actions">
           <RouterLink class="action-link" :to="{ path: '/purchase-receiving', query: latestReceivingRouteQuery }">
-            处理本次导入待收货
+            {{ importResult?.imported_items?.length ? '处理本次导入待收货' : '去看采购收货' }}
           </RouterLink>
-          <button class="action-link ghost" type="button" @click="resultDialogVisible = true">查看并调整导入明细</button>
+          <button v-if="importResult" class="action-link ghost" type="button" @click="resultDialogVisible = true">查看并调整导入明细</button>
         </div>
+      </div>
+
+      <div v-if="feishuSyncResult" class="import-notes compact-notes">
+        <article class="note-card">
+          <strong>{{ feishuSyncResult.sync_state.last_sync_status || '同步已完成' }}</strong>
+          <p>{{ feishuSyncResult.sync_state.last_sync_message || '飞书审批实例已同步到本地。' }}</p>
+          <p>最近同步：{{ formatDateTime(feishuSyncResult.sync_state.last_synced_at) }}</p>
+        </article>
+        <article v-for="(warning, index) in feishuSyncResult.warnings" :key="`${warning}-${index}`" class="note-card warm-note">
+          <strong>警告</strong>
+          <p>{{ warning }}</p>
+        </article>
       </div>
     </section>
 

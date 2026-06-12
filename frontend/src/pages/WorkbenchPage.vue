@@ -94,26 +94,28 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page-section hero-section hero-operations">
+  <section class="page-section hero-section hero-operations workbench-task-page">
     <div class="section-heading">
       <div>
-        <p class="section-kicker">今日重点</p>
-        <h3>先处理待办，再进入具体作业</h3>
+        <p class="section-kicker">今日待办</p>
+        <h3>先收口异常和待收货，再进入具体作业</h3>
       </div>
       <span class="section-meta">工作台</span>
     </div>
 
-    <p class="section-copy">{{ workbenchSummary }}</p>
+    <div class="selection-toolbar business-toolbar workbench-summary-bar">
+      <div class="selection-status">
+        <span>今日待办摘要</span>
+        <strong>{{ workbenchSummary }}</strong>
+        <small>首屏只保留需要立即推进的入口，明细放到下方继续处理。</small>
+      </div>
+      <div class="selection-actions">
+        <span class="console-badge warn">低库存 {{ dashboard?.summary.low_stock_items ?? '--' }} 条</span>
+        <span class="console-badge info">待收货 {{ pendingReceiptsLoading ? '--' : pendingReceipts.length }} 条</span>
+      </div>
+    </div>
 
     <div class="metric-grid compact">
-      <article class="metric-card">
-        <span>库存项目</span>
-        <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong>
-      </article>
-      <article class="metric-card">
-        <span>库存总量</span>
-        <strong>{{ dashboard?.summary.total_stock_quantity ?? '--' }}</strong>
-      </article>
       <article class="metric-card danger">
         <span>低库存预警</span>
         <strong>{{ dashboard?.summary.low_stock_items ?? '--' }}</strong>
@@ -122,28 +124,32 @@ onMounted(async () => {
         <span>待收货采购</span>
         <strong>{{ pendingReceiptsLoading ? '--' : pendingReceipts.length }}</strong>
       </article>
+      <article class="metric-card">
+        <span>库存项目</span>
+        <strong>{{ dashboard?.summary.total_items ?? '--' }}</strong>
+      </article>
     </div>
 
-    <div class="workbench-lane-grid">
-      <article class="workbench-lane urgent">
+    <div class="workbench-lane-grid workbench-task-lanes">
+      <article class="workbench-lane urgent workbench-exception-card">
         <div class="workbench-lane-head">
           <div>
-            <p class="section-kicker">库存异常</p>
+            <p class="section-kicker">异常入口</p>
             <h4>低库存预警</h4>
           </div>
           <span class="console-badge warn">{{ dashboard?.summary.low_stock_items ?? '--' }} 条</span>
         </div>
         <p>{{ lowStockSummary }}</p>
         <div class="workbench-action-row">
-          <RouterLink class="action-link ghost" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看预警对象</RouterLink>
-          <RouterLink class="action-link secondary" to="/receipt">直接补录入库</RouterLink>
+          <RouterLink class="action-link secondary" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看预警对象</RouterLink>
+          <RouterLink class="action-link ghost" to="/receipt">直接补录入库</RouterLink>
         </div>
       </article>
 
-      <article class="workbench-lane">
+      <article class="workbench-lane workbench-exception-card">
         <div class="workbench-lane-head">
           <div>
-            <p class="section-kicker">采购待办</p>
+            <p class="section-kicker">异常入口</p>
             <h4>待收货采购</h4>
           </div>
           <span class="console-badge info">{{ pendingReceiptsLoading ? '--' : pendingReceipts.length }} 条</span>
@@ -156,9 +162,9 @@ onMounted(async () => {
       </article>
     </div>
 
-    <div class="workbench-action-strip">
+    <div class="workbench-action-strip workbench-quick-strip">
       <div class="workbench-action-group">
-        <span>常用作业</span>
+        <span>快捷操作</span>
         <div class="workbench-action-row">
           <RouterLink
             v-for="action in primaryActions"
@@ -187,104 +193,7 @@ onMounted(async () => {
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">库存预警</p>
-          <h3>优先核对低库存</h3>
-        </div>
-        <span class="section-meta">{{ loading ? '加载中' : `预览 ${lowStockItems.length} / ${dashboard?.summary.low_stock_items ?? 0} 条` }}</span>
-      </div>
-
-      <div class="console-table desktop-only ledger-window">
-        <div class="console-table-scroll workbench-table-scroll">
-          <table class="console-data-table dense-table workbench-data-table">
-            <colgroup>
-              <col style="width: 250px" />
-              <col style="width: 180px" />
-              <col style="width: 180px" />
-              <col style="width: 140px" />
-              <col style="width: 120px" />
-              <col style="width: 120px" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>物料名称</th>
-                <th>规格</th>
-                <th>供应商</th>
-                <th>区位</th>
-                <th>申请人</th>
-                <th class="align-right">库存</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in lowStockItems" :key="item.id">
-                <td class="console-data-cell">
-                  <div class="console-cell">
-                    <RouterLink class="workbench-inline-link" :to="{ path: '/overview', query: { itemId: item.id, source: 'workbench-low-stock' } }">
-                      <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
-                    </RouterLink>
-                  </div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
-                </td>
-                <td class="console-data-cell">
-                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
-                </td>
-                <td class="console-data-cell v-middle">
-                  <div class="console-cell muted console-nowrap" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
-                </td>
-                <td class="console-data-cell align-right v-middle">
-                  <div class="console-cell align-right">
-                    <span class="console-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div v-if="!loading && !lowStockItems.length" class="console-empty">当前没有低库存预警项。</div>
-        <div v-if="loading" class="console-empty">正在加载库存态势...</div>
-      </div>
-
-      <div class="mobile-only mobile-flow-stack">
-        <div class="stack-list">
-          <RouterLink
-            v-for="item in lowStockItems"
-            :key="item.id"
-            class="data-row clickable triplet mobile-task-card"
-            :to="{ path: '/overview', query: { itemId: item.id, source: 'workbench-low-stock' } }"
-          >
-            <div class="data-row-main">
-              <div class="data-row-head">
-                <strong>{{ item.material_name }}</strong>
-                <span class="data-row-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
-              </div>
-              <div class="data-row-meta">
-                <span>规格：{{ item.specification || '未填规格' }}</span>
-                <span>区位：{{ item.location_name || '未填区位' }}</span>
-                <span>采购人：{{ item.requester || '未填' }}</span>
-              </div>
-            </div>
-          </RouterLink>
-
-          <div v-if="!loading && !lowStockItems.length" class="empty-state">当前没有低库存预警项。</div>
-          <div v-if="loading" class="empty-state">正在加载库存态势...</div>
-        </div>
-      </div>
-
-      <div class="console-table-caption">
-        <span>点击物料名称可直接带着上下文回到库存台账定位该物料。</span>
-        <RouterLink class="action-link ghost" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看完整台账</RouterLink>
-      </div>
-    </section>
-
-    <section class="page-section">
-      <div class="section-heading">
-        <div>
-          <p class="section-kicker">采购待办</p>
+          <p class="section-kicker">待办明细</p>
           <h3>待收货采购优先收尾</h3>
         </div>
         <span class="section-meta">{{ pendingReceiptsLoading ? '加载中' : `预览 ${pendingPreviewItems.length} / ${pendingReceipts.length} 条` }}</span>
@@ -378,6 +287,103 @@ onMounted(async () => {
       <div class="console-table-caption">
         <span>点击物料名称可直接带入采购收货页继续处理。</span>
         <RouterLink class="action-link ghost" :to="{ path: '/purchase-receiving', query: { source: 'workbench-pending' } }">查看完整待收货列表</RouterLink>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">待办明细</p>
+          <h3>低库存清单</h3>
+        </div>
+        <span class="section-meta">{{ loading ? '加载中' : `预览 ${lowStockItems.length} / ${dashboard?.summary.low_stock_items ?? 0} 条` }}</span>
+      </div>
+
+      <div class="console-table desktop-only ledger-window">
+        <div class="console-table-scroll workbench-table-scroll">
+          <table class="console-data-table dense-table workbench-data-table">
+            <colgroup>
+              <col style="width: 250px" />
+              <col style="width: 180px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 120px" />
+              <col style="width: 120px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>供应商</th>
+                <th>区位</th>
+                <th>申请人</th>
+                <th class="align-right">库存</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in lowStockItems" :key="item.id">
+                <td class="console-data-cell">
+                  <div class="console-cell">
+                    <RouterLink class="workbench-inline-link" :to="{ path: '/overview', query: { itemId: item.id, source: 'workbench-low-stock' } }">
+                      <strong class="console-clamp-2" :title="item.material_name">{{ item.material_name }}</strong>
+                    </RouterLink>
+                  </div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.specification || '未填规格'">{{ item.specification || '未填规格' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-clamp-2" :title="item.supplier_name || '未填供应商'">{{ item.supplier_name || '未填供应商' }}</div>
+                </td>
+                <td class="console-data-cell">
+                  <div class="console-cell muted console-nowrap" :title="item.location_name || '未填区位'">{{ item.location_name || '未填区位' }}</div>
+                </td>
+                <td class="console-data-cell v-middle">
+                  <div class="console-cell muted console-nowrap" :title="item.requester || '未填'">{{ item.requester || '未填' }}</div>
+                </td>
+                <td class="console-data-cell align-right v-middle">
+                  <div class="console-cell align-right">
+                    <span class="console-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="!loading && !lowStockItems.length" class="console-empty">当前没有低库存预警项。</div>
+        <div v-if="loading" class="console-empty">正在加载库存态势...</div>
+      </div>
+
+      <div class="mobile-only mobile-flow-stack">
+        <div class="stack-list">
+          <RouterLink
+            v-for="item in lowStockItems"
+            :key="item.id"
+            class="data-row clickable triplet mobile-task-card"
+            :to="{ path: '/overview', query: { itemId: item.id, source: 'workbench-low-stock' } }"
+          >
+            <div class="data-row-main">
+              <div class="data-row-head">
+                <strong>{{ item.material_name }}</strong>
+                <span class="data-row-badge warn">{{ item.quantity_on_hand }} {{ item.unit || '件' }}</span>
+              </div>
+              <div class="data-row-meta">
+                <span>规格：{{ item.specification || '未填规格' }}</span>
+                <span>区位：{{ item.location_name || '未填区位' }}</span>
+                <span>采购人：{{ item.requester || '未填' }}</span>
+              </div>
+            </div>
+          </RouterLink>
+
+          <div v-if="!loading && !lowStockItems.length" class="empty-state">当前没有低库存预警项。</div>
+          <div v-if="loading" class="empty-state">正在加载库存态势...</div>
+        </div>
+      </div>
+
+      <div class="console-table-caption">
+        <span>点击物料名称可直接带着上下文回到库存台账定位该物料。</span>
+        <RouterLink class="action-link ghost" :to="{ path: '/overview', query: { source: 'workbench-low-stock' } }">查看完整台账</RouterLink>
       </div>
     </section>
   </div>
